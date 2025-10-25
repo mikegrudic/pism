@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: pism
+Version: 0.0.1
+Summary: object-oriented ISM processes
+Author-email: Mike Grudić <mgrudic@flatironinstitute.org>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/mikegrudic/pism
+Project-URL: Issues, https://github.com/mikegrudic/pism/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
+# pism
+Flexible, object-oriented implementation of ISM microphysics and chemistry
