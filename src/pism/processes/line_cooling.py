@@ -29,4 +29,5 @@ def LineCoolingSimple(emitter: str, collider: str) -> NBodyProcess:
 
     return process
 
-def LineCooling(emitter: str)
+
+# def LineCooling(emitter: str)
