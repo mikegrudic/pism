@@ -1,6 +1,10 @@
 """Implementation of basic Process class"""
 
 from collections import defaultdict
+import sympy as sp
+from sympy import init_printing
+
+init_printing()
 
 
 class Process:
@@ -45,3 +49,8 @@ class Process:
         for k in combined_keys:
             combined_network[k] = n1[k] + n2[k]
         return combined_network
+
+    def print_network_equations(self):
+        """Prints the system of equations in the chemistry network"""
+        for k, rhs in self.network.items():
+            print(f"{sp.symbols(f'dn_{k}/dt')} = {sp.simplify(rhs)}")

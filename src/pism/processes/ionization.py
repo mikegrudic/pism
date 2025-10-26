@@ -39,7 +39,7 @@ class Ionization(Process):
 
 
 collisional_ionization_cooling_rates = {
-    "H": 1.27e-21 * sp.sqrt(T) * sp.exp(-157809.1 / T) / (1 + sp.sqrt(T5)),
+    "H": 1.27e-21 * sp.sqrt(T) * sp.exp(-157809.1 / T) / (1 + sp.sqrt(T5)),  # type: ignore
     "He": 9.38e-22 * sp.sqrt(T) * sp.exp(-285335.4 / T) / (1 + sp.sqrt(T5)),
     "He+": 4.95e-22 * sp.sqrt(T) * sp.exp(-631515 / T) / (1 + sp.sqrt(T5)),
 }

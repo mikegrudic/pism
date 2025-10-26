@@ -2,7 +2,6 @@ import sympy as sp
 from .process import Process
 from .nbody_process import NBodyProcess
 from ..symbols import T, T5
-import warnings
 
 # put analytic fits for cooling efficiencies
 line_cooling_coeffs = {
@@ -30,7 +29,7 @@ def LineCoolingSimple(emitter: str, collider=None) -> NBodyProcess:
 
     if collider is None:  # if we haven't specified a collider, just take all of them and return the sum
         p = [LineCoolingSimple(emitter, c) for c in coeffs]
-        return sum(p, Process())  # have to put a 0-process in here as start variable or it will try to add 0 + process
+        return sum(p, Process())  # type: ignore # have to put a 0-process in here as start variable or it will try to add 0 + process
 
     process = NBodyProcess({emitter, collider})
     if collider not in line_cooling_coeffs[emitter]:
