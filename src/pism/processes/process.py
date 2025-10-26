@@ -4,6 +4,7 @@ from collections import defaultdict
 import sympy as sp
 from sympy.printing import latex
 
+
 class Process:
     """
     Top-level class containing a description of a microscopic process
@@ -50,4 +51,4 @@ class Process:
     def print_network_equations(self):
         """Prints the system of equations in the chemistry network"""
         for k, rhs in self.network.items():
-            print(latex(sp.symbols(f'dn_{k}/dt') == sp.simplify(rhs)"))
+            print(sp.symbols(f"dn_{k}/dt"), "=", sp.simplify(rhs))
