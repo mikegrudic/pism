@@ -62,6 +62,6 @@ def CollisionalIonization(species: str) -> Ionization:
     elif process.ionization_energy is not None:
         process.heat = process.ionization_energy * process.rate
     else:
-        raise NotImplementedError((f"{species} collisional ionization cooling rate could not be computed.")
+        raise NotImplementedError(f"{species} collisional ionization cooling rate could not be computed.")
 
     return process
