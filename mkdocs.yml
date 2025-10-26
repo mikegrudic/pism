@@ -1,10 +1,2 @@
-site_name: "My Library"
-
-theme:
-  name: "mkdocs"
-
-plugins:
-- search
-
 nav:
   - "My page": my_page.md
