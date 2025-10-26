@@ -1,2 +1,16 @@
+plugins:
+- mkdocstrings:
+
+site_name: "My Library"
+
+theme:
+  name: "material"
+
+plugins:
+- search
+- mkdocstrings:
+    default_handler: python
+
+
 nav:
   - "My page": my_page.md
