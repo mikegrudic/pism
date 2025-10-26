@@ -1,2 +1,4 @@
+site_name: pism docs
+
 nav:
   - "My page": my_page.md
