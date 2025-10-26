@@ -17,7 +17,6 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
-dependencies=["mkdocstrings[python]>=0.18","mkdocs-material"]
 
 [project.urls]
 Homepage = "https://github.com/mikegrudic/pism"
