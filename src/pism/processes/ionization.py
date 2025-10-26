@@ -13,12 +13,12 @@ class Ionization(Process):
     Implements method for setting the chemistry network terms
     """
 
-    def __init__(self, species):
-        super().__init__()
+    def __init__(self, species: str):
         self.species = species
         self.ionized_species = ionize(species)
+        super().__init__(self)
         self.ionization_energy = None
-        self.__rate_per_volume = None
+        self.__rate_per_volume = 0
 
     @property
     def rate(self):
@@ -31,6 +31,8 @@ class Ionization(Process):
 
     def update_network(self):
         """Sets up rate terms in the associated chemistry network for each species involved"""
+        if self.rate is None:
+            return
         self.network[self.species] -= self.rate
         self.network[self.ionized_species] += self.rate
         self.network["e-"] += self.rate
@@ -49,14 +51,19 @@ collisional_ionization_rates = {
 }
 
 
-def CollisionalIonization(species: str) -> Ionization:
+def CollisionalIonization(species=None) -> Ionization:
     """Return an ionization process representing collisional ionization of the input species"""
-    process = Ionization(species)
 
+    if species is None:
+        return sum([CollisionalIonization(s) for s in collisional_ionization_rates], Process())
+
+    process = Ionization(species)
+    process.name = f"Collisional Ionization of {species}"
     nprod = sp.symbols(f"n_{species}") * sp.symbols("n_e-")
+
     if species not in collisional_ionization_rates:
         raise NotImplementedError(f"{species} does not have an available collisional ionization coefficient.")
-    process.rate = collisional_ionization_rates * nprod
+    process.rate = collisional_ionization_rates[species] * nprod
 
     if species in collisional_ionization_cooling_rates:
         process.heat = -collisional_ionization_cooling_rates[species] * nprod
