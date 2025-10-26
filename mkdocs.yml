@@ -1,5 +1,5 @@
 site_name: pism documentation
-site_description: A Python project to retrieve data from the NIST Atomic Spectra Database (ASD), using caching for fast, efficient data handling
+site_description: yet another ISM processes package
 repo_name: pism
 repo_url: https://github.com/mikegrudic/pism
 
