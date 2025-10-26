@@ -13,9 +13,9 @@ line_cooling_coeffs = {
 def LineCoolingSimple(emitter: str, collider: str) -> NBodyProcess:
     """Returns a 2-body process representing cooling via excitations from collisions of given pair of species
 
-    This is the simple approximation where everything is well below critical density. eventually would like to have a
-    class that considers collisions from all available colliders, given just the energies, deexcitation coefficients,
-    temperature, and statistical weights...
+    This is the simple approximation where everything is well below critical density and no ambient radiation field.
+    eventually would like to have a class that considers collisions from all available colliders, given just the
+    energies, deexcitation coefficients, temperature, and statistical weights...
     """
 
     process = NBodyProcess({emitter, collider})

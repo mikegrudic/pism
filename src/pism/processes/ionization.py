@@ -10,13 +10,14 @@ class Ionization(Process):
     """
     Class describing an ionization process. Could be collisional, photo, or cosmic ray-induced.
 
-    Implements the chemistry network terms
+    Implements method for setting the chemistry network terms
     """
 
     def __init__(self, species):
         super().__init__()
         self.species = species
         self.ionized_species = ionize(species)
+        self.ionization_energy = None
         self.__rate_per_volume = None
 
     @property
