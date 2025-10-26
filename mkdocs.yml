@@ -1,12 +1,15 @@
-site_name: "My Library"
+# site_name: "My Library"
 
-theme:
-  name: "mkdocs"
+# theme:
+#   name: "mkdocs"
 
-plugins:
-- search
-- mkdocstrings:
-    default_handler: python
+# plugins:
+# - search
+# - mkdocstrings:
+#     default_handler: python
+
+# nav:
+#   - "My page": my_page.md
 
 nav:
   - "My page": my_page.md
