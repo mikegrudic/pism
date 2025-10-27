@@ -2,7 +2,7 @@
 
 from .process import Process
 from ..misc import ionize
-from ..symbols import T, T5, T3, T6
+from ..symbols import T, T5, T3, T6, n_e, n_
 import sympy as sp
 from astropy import units as u
 
@@ -18,7 +18,7 @@ class Ionization(Process):
         self.species = species
         self.ionized_species = ionize(species)
         self.__ionization_energy = None
-        super().__init__(self)
+        super().__init__()
         self.__rate_per_volume = 0
 
     @property
@@ -47,20 +47,21 @@ class Ionization(Process):
 
 def ionization_energy(species, unit=u.erg):
     """Return the energy in erg required to ionize a species"""
+    # NOTE: come back and get this from a proper datafile
     energies_eV = {"H": 13.6, "He": 24.59, "He+": 54.42}
     return energies_eV[species] * u.eV.to(unit)
 
 
 collisional_ionization_cooling_rates = {
-    "H": 1.27e-21 * sp.sqrt(T) * sp.exp(-157809.1 / T) / (1 + sp.sqrt(T5)),  # type: ignore
-    "He": 9.38e-22 * sp.sqrt(T) * sp.exp(-285335.4 / T) / (1 + sp.sqrt(T5)),
-    "He+": 4.95e-22 * sp.sqrt(T) * sp.exp(-631515 / T) / (1 + sp.sqrt(T5)),
+    "H": 1.27e-21 * sp.sqrt(T) * sp.exp(-157809.1 / T) / (1 + sp.sqrt(T5)),  # 1996ApJS..105...19K
+    "He": 9.38e-22 * sp.sqrt(T) * sp.exp(-285335.4 / T) / (1 + sp.sqrt(T5)),  # 1996ApJS..105...19K
+    "He+": 4.95e-22 * sp.sqrt(T) * sp.exp(-631515 / T) / (1 + sp.sqrt(T5)),  # 1996ApJS..105...19K
 }
 
 collisional_ionization_rates = {
-    "H": 5.85e-11 * sp.sqrt(T) * sp.exp(-157809.1 / T) / (1 + sp.sqrt(T5)),
-    "He": 2.38e-11 * sp.sqrt(T) * sp.exp(-285335.4 / T) / (1 + sp.sqrt(T5)),
-    "He+": 5.68e-12 * sp.sqrt(T) * sp.exp(-631515 / T) / (1 + sp.sqrt(T5)),
+    "H": 5.85e-11 * sp.sqrt(T) * sp.exp(-157809.1 / T) / (1 + sp.sqrt(T5)),  # 1996ApJS..105...19K
+    "He": 2.38e-11 * sp.sqrt(T) * sp.exp(-285335.4 / T) / (1 + sp.sqrt(T5)),  # 1996ApJS..105...19K
+    "He+": 5.68e-12 * sp.sqrt(T) * sp.exp(-631515 / T) / (1 + sp.sqrt(T5)),  # 1996ApJS..105...19K
 }
 
 
@@ -72,17 +73,11 @@ def CollisionalIonization(species=None) -> Ionization:
 
     process = Ionization(species)
     process.name = f"Collisional Ionization of {species}"
-    nprod = sp.symbols(f"n_{species}") * sp.symbols("n_e-")
+    nprod = n_(species) * n_e
 
     if species not in collisional_ionization_rates:
         raise NotImplementedError(f"{species} does not have an available collisional ionization coefficient.")
     process.rate = collisional_ionization_rates[species] * nprod
     process.heat = process.ionization_energy * process.rate
-    # if species in collisional_ionization_cooling_rates:
-    #     process.heat = -collisional_ionization_cooling_rates[species] * nprod
-    #    elif process.ionization_energy is not None:
-    #        process.heat = process.ionization_energy * process.rate
-    #    else:
-    #        raise NotImplementedError(f"{species} collisional ionization cooling rate could not be computed.")
 
     return process

@@ -60,13 +60,14 @@ def GasPhaseRecombination(ion=None) -> Recombination:
 
 
 gasphase_recombination_rates = {
-    "H+": 8.4e-11 / sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),
-    "He+": 1.5e-10 * T**-0.6353 + 1.9e-3 * T**-1.5 * sp.exp(-4.7e5 / T) * (1 + 0.3 * sp.exp(-9.4e4 / T)),
+    "H+": 8.4e-11 / sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),  # 1996ApJS..105...19K
+    "He+": 1.5e-10 * T**-0.6353
+    + 1.9e-3 * T**-1.5 * sp.exp(-4.7e5 / T) * (1 + 0.3 * sp.exp(-9.4e4 / T)),  # 1996ApJS..105...19K
 }
 gasphase_recombination_rates["He++"] = 4 * gasphase_recombination_rates["H+"]  # H-like
 
 gasphase_recombination_cooling = {
-    "H+": 8.7e-27 * sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),
-    "He+": 1.5e-10 * T**-0.3647,
+    "H+": 8.7e-27 * sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),  # 1996ApJS..105...19K
+    "He+": 1.5e-10 * T**-0.3647,  # 1996ApJS..105...19K
 }
 gasphase_recombination_cooling["He++"] = 4 * gasphase_recombination_cooling["H+"]  # H-like
