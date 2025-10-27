@@ -53,18 +53,34 @@ def GasPhaseRecombination(ion=None) -> Recombination:
 
     if ion not in gasphase_recombination_rates:
         raise NotImplementedError(f"{ion} does not have an available gas-phase recombination coefficient.")
-
+    print(gasphase_recombination_rates[ion])
     process.rate_coefficient = gasphase_recombination_rates[ion]
     process.heat_rate_coefficient = -gasphase_recombination_cooling[ion]
     return process
 
 
+# All fits below are from Verner & Ferland 1996
 gasphase_recombination_rates = {
-    "H+": 8.4e-11 / sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),  # 1996ApJS..105...19K
-    "He+": 1.5e-10 * T**-0.6353
+    "H+": 7.982e-11
+    / (sp.sqrt(T / 3.148) * sp.Pow((1.0 + sp.sqrt(T / 3.148)), 0.252) * sp.Pow((1.0 + sp.sqrt(T / 7.036e5)), 1.748)),
+    "He+": 9.356e-10
+    / (
+        sp.sqrt(T / 4.266e-2)
+        * sp.Pow((1.0 + sp.sqrt(T / 4.266e-2)), 0.2108)
+        * sp.Pow((1.0 + sp.sqrt(T / 3.676e7)), 1.7892)
+    )  # 1.5e-10 * T**-0.6353, #
     + 1.9e-3 * T**-1.5 * sp.exp(-4.7e5 / T) * (1 + 0.3 * sp.exp(-9.4e4 / T)),  # 1996ApJS..105...19K
+    "He++": 2.0
+    * 7.982e-11
+    / (
+        sp.sqrt(T / (4.0 * 3.148))
+        * sp.Pow((1.0 + sp.sqrt(T / (4.0 * 3.148))), 0.252)
+        * sp.Pow((1.0 + sp.sqrt(T / (4.0 * 7.036e5))), 1.748)
+    ),
 }
-gasphase_recombination_rates["He++"] = 4 * gasphase_recombination_rates["H+"]  # H-like
+
+
+# gasphase_recombination_rates["He++"] = 4 * gasphase_recombination_rates["H+"]  # H-like
 
 gasphase_recombination_cooling = {
     "H+": 8.7e-27 * sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),  # 1996ApJS..105...19K
