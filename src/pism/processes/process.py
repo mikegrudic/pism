@@ -20,6 +20,7 @@ class Process:
         self.rate = 0
         self.heat = 0
         self.bibliography = bibliography
+        self.species = {}
 
     def initialize_network(self):
         self.network = defaultdict(int)  # this is a dict for which unknown keys are initialized to 0 by default
