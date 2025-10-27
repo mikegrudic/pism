@@ -68,8 +68,8 @@ gasphase_recombination_rates = {
         sp.sqrt(T / 4.266e-2)
         * sp.Pow((1.0 + sp.sqrt(T / 4.266e-2)), 0.2108)
         * sp.Pow((1.0 + sp.sqrt(T / 3.676e7)), 1.7892)
-    )  # 1.5e-10 * T**-0.6353, #
-    + 1.9e-3 * T**-1.5 * sp.exp(-4.7e5 / T) * (1 + 0.3 * sp.exp(-9.4e4 / T)),  # 1996ApJS..105...19K
+    )
+    + 1.9e-3 * T**-1.5 * sp.exp(-4.7e5 / T) * (1 + 0.3 * sp.exp(-9.4e4 / T)),
     "He++": 2.0
     * 7.982e-11
     / (
@@ -78,9 +78,6 @@ gasphase_recombination_rates = {
         * sp.Pow((1.0 + sp.sqrt(T / (4.0 * 7.036e5))), 1.748)
     ),
 }
-
-
-# gasphase_recombination_rates["He++"] = 4 * gasphase_recombination_rates["H+"]  # H-like
 
 gasphase_recombination_cooling = {
     "H+": 8.7e-27 * sp.sqrt(T) * T3**-0.2 / (1 + T6**0.7),  # 1996ApJS..105...19K
