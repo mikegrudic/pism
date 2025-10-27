@@ -3,6 +3,7 @@
 from .nbody_process import NBodyProcess
 from ..misc import species_charge
 from ..symbols import T
+import sympy as sp
 
 
 def gaunt_factor(T):

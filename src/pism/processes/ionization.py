@@ -4,6 +4,7 @@ from .process import Process
 from ..misc import ionize
 from ..symbols import T, T5, T3, T6
 import sympy as sp
+from astropy import units as u
 
 
 class Ionization(Process):
@@ -16,8 +17,8 @@ class Ionization(Process):
     def __init__(self, species: str):
         self.species = species
         self.ionized_species = ionize(species)
+        self.__ionization_energy = None
         super().__init__(self)
-        self.ionization_energy = None
         self.__rate_per_volume = 0
 
     @property
@@ -29,6 +30,12 @@ class Ionization(Process):
         self.__rate_per_volume = value
         self.update_network()
 
+    @property
+    def ionization_energy(self):
+        if self.__ionization_energy is None:
+            self.__ionization_energy = ionization_energy(self.species)
+        return self.__ionization_energy
+
     def update_network(self):
         """Sets up rate terms in the associated chemistry network for each species involved"""
         if self.rate is None:
@@ -36,6 +43,12 @@ class Ionization(Process):
         self.network[self.species] -= self.rate
         self.network[self.ionized_species] += self.rate
         self.network["e-"] += self.rate
+
+
+def ionization_energy(species, unit=u.erg):
+    """Return the energy in erg required to ionize a species"""
+    energies_eV = {"H": 13.6, "He": 24.59, "He+": 54.42}
+    return energies_eV[species] * u.eV.to(unit)
 
 
 collisional_ionization_cooling_rates = {
@@ -64,12 +77,12 @@ def CollisionalIonization(species=None) -> Ionization:
     if species not in collisional_ionization_rates:
         raise NotImplementedError(f"{species} does not have an available collisional ionization coefficient.")
     process.rate = collisional_ionization_rates[species] * nprod
-
-    if species in collisional_ionization_cooling_rates:
-        process.heat = -collisional_ionization_cooling_rates[species] * nprod
-    elif process.ionization_energy is not None:
-        process.heat = process.ionization_energy * process.rate
-    else:
-        raise NotImplementedError(f"{species} collisional ionization cooling rate could not be computed.")
+    process.heat = process.ionization_energy * process.rate
+    # if species in collisional_ionization_cooling_rates:
+    #     process.heat = -collisional_ionization_cooling_rates[species] * nprod
+    #    elif process.ionization_energy is not None:
+    #        process.heat = process.ionization_energy * process.rate
+    #    else:
+    #        raise NotImplementedError(f"{species} collisional ionization cooling rate could not be computed.")
 
     return process
