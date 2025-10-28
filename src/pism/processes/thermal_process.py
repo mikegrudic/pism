@@ -1,6 +1,6 @@
 """Class describing a generic heating/cooling process with no associated radiation or chemistry"""
 
-from .process import Process
+from ..process import Process
 from ..symbols import c_s, G, ρ, T, n_e, z
 import sympy as sp
 

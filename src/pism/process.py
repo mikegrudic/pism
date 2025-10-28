@@ -65,3 +65,6 @@ class Process:
         """Prints the system of equations in the chemistry network"""
         for k, rhs in self.network.items():
             print(sp.symbols(f"dn_{k}/dt"), "=", sp.simplify(rhs))
+
+    def solve_steadystate(self, known_quantities={}, x0={}):
+        """Solves for a steady state of the network"""

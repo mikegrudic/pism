@@ -1,4 +1,4 @@
-from .process import *
+from ..process import *
 from .nbody_process import *
 from .thermal_process import *
 from .freefree_emission import *
