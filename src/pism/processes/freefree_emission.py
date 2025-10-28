@@ -16,6 +16,6 @@ def FreeFreeEmission(ion: str) -> NBodyProcess:
     process = NBodyProcess({ion, "e-"})
     charge = species_charge(ion)
     if charge <= 0:
-        return 0
+        raise ValueError(f"{ion} does not appear to be a cation - cannot do bremmstrahlung.")
     process.heat_rate_coefficient = -1.42e-27 * gaunt_factor(T) * charge**2 * sp.sqrt(T)  # 1996ApJS..105...19K
     return process
