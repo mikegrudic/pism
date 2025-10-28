@@ -10,7 +10,7 @@ authors = [
 ]
 description = "object-oriented ISM processes"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

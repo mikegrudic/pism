@@ -53,7 +53,6 @@ def GasPhaseRecombination(ion=None) -> Recombination:
 
     if ion not in gasphase_recombination_rates:
         raise NotImplementedError(f"{ion} does not have an available gas-phase recombination coefficient.")
-    print(gasphase_recombination_rates[ion])
     process.rate_coefficient = gasphase_recombination_rates[ion]
     process.heat_rate_coefficient = -gasphase_recombination_cooling[ion]
     return process

@@ -35,7 +35,7 @@ class Process:
         if other == 0:  # necessary for native sum() routine to work
             return self
 
-        quantities_to_sum = "heat", "dust_heat"  # , "rate"
+        quantities_to_sum = "heat", "dust_heat"  # all energy exchange terms
 
         sum_process = Process()
         sum_process.rate = None  # no longer meaningful to define a single rate
@@ -66,5 +66,9 @@ class Process:
         for k, rhs in self.network.items():
             print(sp.symbols(f"dn_{k}/dt"), "=", sp.simplify(rhs))
 
+    def network_species(self):
+        return list(self.network.keys())
+
     def solve_steadystate(self, known_quantities={}, x0={}):
         """Solves for a steady state of the network"""
+        return
