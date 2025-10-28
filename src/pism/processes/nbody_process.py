@@ -1,6 +1,6 @@
 """Class specifying an N-body collisional process with generic methods"""
 
-from .process import Process
+from ..process import Process
 import sympy as sp
 
 

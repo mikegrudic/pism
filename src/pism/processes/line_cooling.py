@@ -1,5 +1,5 @@
 import sympy as sp
-from .process import Process
+from ..process import Process
 from .nbody_process import NBodyProcess
 from ..symbols import T, T5
 

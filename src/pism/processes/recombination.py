@@ -1,6 +1,6 @@
 """Implementation of recombination process"""
 
-from .process import Process
+from ..process import Process
 from .nbody_process import NBodyProcess
 from ..misc import recombine
 from ..symbols import T, T3, T6
