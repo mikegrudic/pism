@@ -1,35 +1,66 @@
 import jax, jax.numpy as jnp
-import sympy as sp
 
 
-def jax_solver(T):
-    func = sp.lambdify(unknowns + knowns, reduced_network, modules="jax")
-    jacfunc = sp.lambdify(unknowns + knowns, jac, modules="jax")
+def newton_rootsolve(func, guesses, params=[], jacfunc=None, rtol=1e-6, atol=1e-100, max_iter=100):
+    """
+    Solve the system f(X,p) = 0 for X, where both f and X can be vectors of arbitrary length and p is a set of fixed
+    parameters passed to f. Broadcasts and parallelizes over an arbitrary number of initial guesses and parameter
+    choices.
 
-    @jax.jit
-    def solve_abundances(T):
-        def f_numerical(X, knownvals):
-            return jnp.array(func(X[0], X[1], X[2], knownvals[0], knownvals[1], knownvals[2]))
+    Parameters
+    ----------
+    func: callable
+        A JAX function of signature f(X,params) that implements the function we wish to rootfind, where X and params
+        are arrays of shape (n,) and (n_p,) for dimension n and parameter number n_p. In general can return an array of
+        shape (m,)
+    guesses: array_like
+        Shape (n,) or (N,n) array_like where N is the number of guesses + corresponding parameter choices
+    params: array_like
+        Shape (n,) or (N,n_p) array_like where N is the number of guesses + corresponding parameter choices
+    jacfunc: callable, optional
+        Function with the same signature as f that returns the Jacobian of f - will be computed with autodiff from f if
+        not specified.
+    rtol: float or array_like, optional
+        Relative tolerance - can either be the same for all components of X, or a shape (n,) array specifying each.
+    atol: float or array_like, optional
+        Absolute tolerance - can either be the same for all components of X, or a shape (n,) array specifying each.
 
-        def jac_numerical(X, knownvals):
-            return jnp.array(jacfunc(X[0], X[1], X[2], knownvals[0], knownvals[1], knownvals[2]))
+    Returns
+    -------
+    X: array_like
+        Shape (N,n) array of
+    """
+    guesses = jnp.array(guesses)
+    params = jnp.array(params)
+    if len(guesses.shape) < 2:
+        guesses = jnp.atleast_2d(guesses).T
+    if len(params.shape) < 2:
+        params = jnp.atleast_2d(params).T
 
-        def solve_for_T(T, _):
-            x0 = jnp.array([0.5, 1e-5, 1e-5])
-            knownvals = jnp.array([T, 1, 0.24])
+    if jacfunc is None:
+        jac = jax.jacfwd(func)
 
-            X = x0
+    def solve(guess, params):
+        """Function to be called in parallel that solves the root problem for one guess and set of parameters"""
 
-            # can use
-            for _ in range(100):
-                J = jac_numerical(X, knownvals)
-                f = f_numerical(X, knownvals)
-                dx = -jnp.linalg.solve(J, f)  # don't actually have to invert!
-                X += dx
+        def iter_condition(arg):
+            """Iteration condition for the while loop: check if we are within desired tolerance."""
+            X, dx, num_iter = arg
+            return jnp.any(jnp.abs(dx) > rtol * jnp.abs(X) + atol) & (num_iter < max_iter)
 
-            return X
+        def X_new(arg):
+            """Returns the next Newton iterate and the difference from previous guess."""
+            X, _, num_iter = arg
+            dx = -jnp.linalg.solve(jac(X, *params), func(X, *params))
+            return X + dx, dx, num_iter + 1
 
-        X = jax.vmap(solve_for_T)(Tval, None)
-        return X
+        init_val = guess, 100 * guess, 0
+        X, dx, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
 
-    return solve_abundances(T)
+        return jnp.where(num_iter < max_iter, X, X * jnp.nan)
+
+    X = jax.vmap(solve)(guesses, params)
+    return X
+
+
+newton_rootsolve = jax.jit(newton_rootsolve, static_argnames=["func"])

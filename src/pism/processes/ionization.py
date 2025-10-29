@@ -78,6 +78,6 @@ def CollisionalIonization(species=None) -> Ionization:
     if species not in collisional_ionization_rates:
         raise NotImplementedError(f"{species} does not have an available collisional ionization coefficient.")
     process.rate = collisional_ionization_rates[species] * nprod
-    process.heat = process.ionization_energy * process.rate
+    process.heat = -process.ionization_energy * process.rate
 
     return process

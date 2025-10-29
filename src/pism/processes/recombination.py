@@ -88,7 +88,7 @@ gasphase_recombination_rates = {
 mean_kinetic_energy = 1.036e-16 * T
 gasphase_recombination_cooling = {
     "H+": mean_kinetic_energy * gasphase_recombination_rates["H+"],
-    "He+": 1.5e-10 * T**-0.3647,
+    "He+": 1.55e-26 * T**-0.3647,
     "He++": mean_kinetic_energy * gasphase_recombination_rates["He++"],
 }
 gasphase_recombination_cooling["He++"] = 4 * gasphase_recombination_cooling["H+"]  # H-like
