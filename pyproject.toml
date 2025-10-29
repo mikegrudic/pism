@@ -15,6 +15,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+  "jax", "sympy", "numpy"
+]
+
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
