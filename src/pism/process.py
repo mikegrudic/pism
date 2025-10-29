@@ -19,6 +19,9 @@ class Process:
         self.rate = 0
         self.heat = 0
         self.bibliography = bibliography
+        self.subprocesses = [
+            self,
+        ]
 
     #        self.species = {}
 
@@ -35,7 +38,7 @@ class Process:
         if other == 0:  # necessary for native sum() routine to work
             return self
 
-        quantities_to_sum = "heat", "dust_heat"  # all energy exchange terms
+        quantities_to_sum = "heat", "dust_heat", "subprocesses"  # all energy exchange terms
 
         sum_process = Process()
         sum_process.rate = None  # no longer meaningful to define a single rate
@@ -72,3 +75,6 @@ class Process:
     def solve_steadystate(self, known_quantities={}, x0={}):
         """Solves for a steady state of the network"""
         return
+
+    def __repr__(self):
+        return self.name

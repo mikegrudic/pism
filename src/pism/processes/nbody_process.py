@@ -20,6 +20,9 @@ class NBodyProcess(Process):
         self.colliding_species = colliding_species
         self.rate_coefficient = rate_coefficient
         self.heat_rate_coefficient = heat_rate_coefficient
+        self.subprocesses = [
+            self,
+        ]
 
     @property
     def rate(self):
