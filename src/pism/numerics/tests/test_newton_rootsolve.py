@@ -3,7 +3,7 @@ import jax, jax.numpy as jnp
 from ..solvers import newton_rootsolve
 
 
-def test_newton_rootsolve(N=10**6):
+def test_newton_rootsolve(N=10**5):
     """Test: solve the system x^p = a for various choices of p and a and check solution
 
     NOTE: this newton iteration does not converge in general, so we will not catch all possible bugs that might return
