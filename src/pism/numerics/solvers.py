@@ -55,7 +55,7 @@ def newton_rootsolve(func, guesses, params=[], jacfunc=None, rtol=1e-6, atol=1e-
             return X + dx, dx, num_iter + 1
 
         init_val = guess, 100 * guess, 0
-        X, dx, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
+        X, _, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
 
         return jnp.where(num_iter < max_iter, X, X * jnp.nan)
 
