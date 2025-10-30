@@ -2,6 +2,8 @@
 
 from collections import defaultdict
 import sympy as sp
+from .symbols import n_
+from .misc import base_species, species_charge
 
 
 class Process:
@@ -37,7 +39,7 @@ class Process:
         quantities_to_sum = "heat", "dust_heat", "subprocesses"  # all energy exchange terms
 
         sum_process = Process()
-        sum_process.rate = None  # no longer meaningful to define a single rate
+        sum_process.rate = None  # "rate" ceases to be meaningful for
         for summed_quantity in quantities_to_sum:
             attr1, attr2 = getattr(self, summed_quantity), getattr(other, summed_quantity)
             if attr1 is None or attr2 is None:
@@ -68,9 +70,30 @@ class Process:
     def network_species(self):
         return list(self.network.keys())
 
-    def solve_steadystate(self, known_quantities={}, x0={}):
-        """Solves for a steady state of the network"""
-        return
-
     def __repr__(self):
         return self.name
+
+    # @property
+    # def base_species(self):
+
+    # def reduction_substitutions(self):
+    #     """Returns a dictionary of substitutions of conservation laws to reduce the number of unknowns in the network"""
+    #     substitutions = {
+    #         "n_e-": sum([species_charge(s)*n_(s) for s in self.network_species])
+    #         "n_H": nHtot - sp.symbols("n_H+"),
+    #         "n_He++": Y / (4 - 4 * Y) * nHtot - sp.symbols("n_He") - sp.symbols("n_He+"),
+    #     }
+
+    # for species in system.network:
+    #     for s in substitutions:
+    #         system.network[species] = system.network[species].subs(s, substitutions[s])
+    #         system.heat = system.heat.subs(s, substitutions[s])
+
+    def chemical_equilibrium(self, known_quantities):
+        """Solves the chemical equilibrium after substituting a set of known quantities, e.g. temperature, metallicity, etc.
+
+        Parameters
+        ----------
+        known_quantities: dict
+            Dict of
+        """
