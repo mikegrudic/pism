@@ -10,9 +10,14 @@ import sympy as sp
 
 class Recombination(NBodyProcess):
     """
-    Class describing an recombination process.
+    Class describing a recombination process: ion + e- -> recombined species + hν
 
     Implements method for setting the chemistry network terms
+
+    Parameters
+    ----------
+    ion: str
+        Ionic species being recombined
     """
 
     def __init__(self, ion: str):
@@ -26,6 +31,7 @@ class Recombination(NBodyProcess):
 
     @property
     def rate_coefficient(self):
+        """Returns the rate coefficient of the recombination process"""
         return self.__rate_coefficient
 
     @rate_coefficient.setter
@@ -44,7 +50,19 @@ class Recombination(NBodyProcess):
 
 
 def GasPhaseRecombination(ion=None) -> Recombination:
-    """Return a recombination process representing gas-phase (e.g. radiative) recombination"""
+    """Return a recombination process representing gas-phase (e.g. radiative) recombination
+
+    Parameters
+    ----------
+    ion: str, optional
+        Ionic species getting recombined. If None, function will return a composite process of all gas-phase recombination
+        processes with known rates.
+
+    Returns
+    -------
+    process: Recombination
+        `Process` instance describing the gas-phase recombination process
+    """
     if ion is None:
         return sum([GasPhaseRecombination(s) for s in gasphase_recombination_rates], Process())
 

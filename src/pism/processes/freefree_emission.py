@@ -12,7 +12,18 @@ def gaunt_factor(T):
 
 
 def FreeFreeEmission(ion: str) -> NBodyProcess:
-    """Free-free emisison process"""
+    """Returns a free-free emisison process (i.e. bremmsstrahlung) for the input ion
+
+    Parameters
+    ----------
+    ion: str
+        Ion species
+
+    Returns
+    -------
+    process: NBodyProcess
+        `NBodyProcess` instance describing the cooling process
+    """
     process = NBodyProcess({ion, "e-"})
     charge = species_charge(ion)
     if charge <= 0:

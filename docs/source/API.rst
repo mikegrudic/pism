@@ -1,11 +1,11 @@
 API Documentation
 =================
 
-.. automodule:: pism.Process
-    :members:
+.. automodule:: pism
+    :members: Process
        
 .. automodule:: pism.processes
-    :members:
-       
+    :members: Recombination, GasPhaseRecombination, LineCoolingSimple, FreeFreeEmission, Ionization, CollisionaIonization, NBodyProcess, ThermalProcess
+
 .. automodule:: pism.numerics
-    :members:
+    :members: newton_rootsolve

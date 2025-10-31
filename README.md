@@ -1,12 +1,16 @@
 # pism
 
 [![Python package](https://github.com/mikegrudic/pism/actions/workflows/test.yml/badge.svg)](https://github.com/mikegrudic/pism/actions/workflows/test.yml)
+[![Readthedocs Status][docs-badge]][docs-link]
+
+[docs-link]:           https://pism-code.readthedocs.io
+[docs-badge]:          https://readthedocs.org/projects/pism-code/badge
 
 `pism` is a flexible, object-oriented implementation for systems of ISM microphysics and chemistry equations, with numerical solvers implemented in JAX, and interfaces for embedding the equations and their Jacobians into other codes.
 
-## Yet another ISM code? Why?
+## Do we really need yet another ISM code?
 
-`pism` is seemingly unique in combining two powerful, relatively-modern paradigms:
+`pism` might be interesting because it combines two powerful concepts:
 1. **Object-oriented implementation of microphysics and chemistry via the `Process` class**, which implements methods for representing physical processes, composing them into a network in a fully-symbolic `sympy` representation. OOP is nice here because if you want to add a new process to `pism`, you typically only have to do it in one file. Rate expressions never have to be repeated in-code. Most processes one would want to implement follow very common patterns (e.g. 2-body processes), so class inheritance is also used to minimize new lines of code. 
 Once you've constructed your system, `pism` can give you the symbolic equations to manipulate and analyze as you please. If you want to solve the equations numerically, `Process` has methods for substituting known values into numerical solvers. It can also automatically generate compilable implementations of the RHS of the system to embed in your choice of simulation code and plug into your choice of solver.
 2. **Fast, differentiable implementation of nonlinear algebraic and differential-algebraic equation solvers with JAX**, implemented in its functional programming paradigm (e.g. `pism.numerics.newton_rootsolve`). These can achieve excellent numerical throughput running natively on GPUs - in fact, crunching iterates in-place is essentially the best-case application of numerics on GPUs. Differentiability enables sensitivity analysis with respect to all parameters in a single pass, instead of constructing a grid of `N` parameter variations for `N` parameters. This makes it easier in principle to directly answer questions like "How sensitive is this temperature to the abundance of C or the ionization energy of H?", etc.
@@ -40,7 +44,7 @@ from matplotlib import pyplot as plt
 import sympy as sp
 ```
 
-# Simple processes
+## Simple processes
 A simple process is defined by a single reaction, with a specified rate.
 
 Let's inspect the structure of a single process, the gas-phase recombination of H+: `H+ + e- -> H + hν` 
@@ -112,11 +116,11 @@ Summing processes also sums all chemical and gas/dust cooling/heating rates.
 system.print_network_equations()
 ```
 
-    dn_e-/dt = 5.85e-11*sqrt(T)*n_H*n_e-*exp(-157809.1/T)/(sqrt(10)*sqrt(T)/1000 + 1) + 2.38e-11*sqrt(T)*n_He*n_e-*exp(-285335.4/T)/(sqrt(10)*sqrt(T)/1000 + 1) + 5.68e-12*sqrt(T)*n_He+*n_e-*exp(-631515/T)/(sqrt(10)*sqrt(T)/1000 + 1) - n_He+*n_e-*(0.0019*(1 + 0.3*exp(-94000.0/T))*exp(-470000.0/T)/T**1.5 + 1.93241606228058e-10/(sqrt(T)*(0.000164934781188511*sqrt(T) + 1.0)**1.7892*(4.84160744811772*sqrt(T) + 1.0)**0.2108)) - 1.41621465870114e-10*n_H+*n_e-/(sqrt(T)*(0.00119216696847702*sqrt(T) + 1.0)**1.748*(0.563615123664978*sqrt(T) + 1.0)**0.252) - 5.66485863480458e-10*n_He++*n_e-/(sqrt(T)*(0.00059608348423851*sqrt(T) + 1.0)**1.748*(0.281807561832489*sqrt(T) + 1.0)**0.252)
-    dn_H/dt = -5.85e-11*sqrt(T)*n_H*n_e-*exp(-157809.1/T)/(sqrt(10)*sqrt(T)/1000 + 1) + 1.41621465870114e-10*n_H+*n_e-/(sqrt(T)*(0.00119216696847702*sqrt(T) + 1.0)**1.748*(0.563615123664978*sqrt(T) + 1.0)**0.252)
     dn_H+/dt = 5.85e-11*sqrt(T)*n_H*n_e-*exp(-157809.1/T)/(sqrt(10)*sqrt(T)/1000 + 1) - 1.41621465870114e-10*n_H+*n_e-/(sqrt(T)*(0.00119216696847702*sqrt(T) + 1.0)**1.748*(0.563615123664978*sqrt(T) + 1.0)**0.252)
-    dn_He++/dt = 5.68e-12*sqrt(T)*n_He+*n_e-*exp(-631515/T)/(sqrt(10)*sqrt(T)/1000 + 1) - 5.66485863480458e-10*n_He++*n_e-/(sqrt(T)*(0.00059608348423851*sqrt(T) + 1.0)**1.748*(0.281807561832489*sqrt(T) + 1.0)**0.252)
     dn_He+/dt = 2.38e-11*sqrt(T)*n_He*n_e-*exp(-285335.4/T)/(sqrt(10)*sqrt(T)/1000 + 1) - 5.68e-12*sqrt(T)*n_He+*n_e-*exp(-631515/T)/(sqrt(10)*sqrt(T)/1000 + 1) - n_He+*n_e-*(0.0019*(1 + 0.3*exp(-94000.0/T))*exp(-470000.0/T)/T**1.5 + 1.93241606228058e-10/(sqrt(T)*(0.000164934781188511*sqrt(T) + 1.0)**1.7892*(4.84160744811772*sqrt(T) + 1.0)**0.2108)) + 5.66485863480458e-10*n_He++*n_e-/(sqrt(T)*(0.00059608348423851*sqrt(T) + 1.0)**1.748*(0.281807561832489*sqrt(T) + 1.0)**0.252)
+    dn_He++/dt = 5.68e-12*sqrt(T)*n_He+*n_e-*exp(-631515/T)/(sqrt(10)*sqrt(T)/1000 + 1) - 5.66485863480458e-10*n_He++*n_e-/(sqrt(T)*(0.00059608348423851*sqrt(T) + 1.0)**1.748*(0.281807561832489*sqrt(T) + 1.0)**0.252)
+    dn_H/dt = -5.85e-11*sqrt(T)*n_H*n_e-*exp(-157809.1/T)/(sqrt(10)*sqrt(T)/1000 + 1) + 1.41621465870114e-10*n_H+*n_e-/(sqrt(T)*(0.00119216696847702*sqrt(T) + 1.0)**1.748*(0.563615123664978*sqrt(T) + 1.0)**0.252)
+    dn_e-/dt = 5.85e-11*sqrt(T)*n_H*n_e-*exp(-157809.1/T)/(sqrt(10)*sqrt(T)/1000 + 1) + 2.38e-11*sqrt(T)*n_He*n_e-*exp(-285335.4/T)/(sqrt(10)*sqrt(T)/1000 + 1) + 5.68e-12*sqrt(T)*n_He+*n_e-*exp(-631515/T)/(sqrt(10)*sqrt(T)/1000 + 1) - n_He+*n_e-*(0.0019*(1 + 0.3*exp(-94000.0/T))*exp(-470000.0/T)/T**1.5 + 1.93241606228058e-10/(sqrt(T)*(0.000164934781188511*sqrt(T) + 1.0)**1.7892*(4.84160744811772*sqrt(T) + 1.0)**0.2108)) - 1.41621465870114e-10*n_H+*n_e-/(sqrt(T)*(0.00119216696847702*sqrt(T) + 1.0)**1.748*(0.563615123664978*sqrt(T) + 1.0)**0.252) - 5.66485863480458e-10*n_He++*n_e-/(sqrt(T)*(0.00059608348423851*sqrt(T) + 1.0)**1.748*(0.281807561832489*sqrt(T) + 1.0)**0.252)
     dn_He/dt = -2.38e-11*sqrt(T)*n_He*n_e-*exp(-285335.4/T)/(sqrt(10)*sqrt(T)/1000 + 1) + n_He+*n_e-*(0.0019*(1 + 0.3*exp(-94000.0/T))*exp(-470000.0/T)/T**1.5 + 1.93241606228058e-10/(sqrt(T)*(0.000164934781188511*sqrt(T) + 1.0)**1.7892*(4.84160744811772*sqrt(T) + 1.0)**0.2108))
 
 
@@ -147,12 +151,12 @@ sol = system.chemical_equilibrium(knowns, guesses)
 print(sol)
 ```
 
-    {'H': Array([9.9999994e-01, 9.9999994e-01,           nan, ..., 6.0612069e-07,
-           6.0611501e-07, 6.0610910e-07], dtype=float32), 'He+': Array([6.6641879e-16, 7.0461706e-17,           nan, ..., 6.5619079e-06,
-           6.5618306e-06, 6.5617523e-06], dtype=float32), 'He': Array([7.8947358e-02, 7.8947358e-02,           nan, ..., 2.3453650e-09,
-           2.3453146e-09, 2.3452633e-09], dtype=float32), 'H+': Array([5.9604645e-08, 5.9604645e-08,           nan, ..., 9.9999940e-01,
-           9.9999940e-01, 9.9999940e-01], dtype=float32), 'e-': Array([7.4505806e-08, 7.4505806e-08,           nan, ..., 1.1578876e+00,
-           1.1578876e+00, 1.1578876e+00], dtype=float32), 'He++': Array([7.4505797e-09, 7.4505806e-09,           nan, ..., 7.8940801e-02,
+    {'He+': Array([ 5.9581362e-16, -2.7435927e-16,  6.8873975e-16, ...,
+            6.5619079e-06,  6.5618306e-06,  6.5617523e-06], dtype=float32), 'H': Array([9.9999994e-01, 9.9999994e-01, 9.9999994e-01, ..., 6.0612069e-07,
+           6.0611501e-07, 6.0610910e-07], dtype=float32), 'He': Array([7.8947358e-02, 7.8947358e-02, 7.8947358e-02, ..., 2.3453652e-09,
+           2.3453146e-09, 2.3452633e-09], dtype=float32), 'H+': Array([5.9604645e-08, 5.9604645e-08, 5.9604645e-08, ..., 9.9999940e-01,
+           9.9999940e-01, 9.9999940e-01], dtype=float32), 'e-': Array([7.4505806e-08, 7.4505806e-08, 7.4505806e-08, ..., 1.1578876e+00,
+           1.1578876e+00, 1.1578876e+00], dtype=float32), 'He++': Array([7.4505802e-09, 7.4505806e-09, 7.4505797e-09, ..., 7.8940801e-02,
            7.8940801e-02, 7.8940801e-02], dtype=float32)}
 
 

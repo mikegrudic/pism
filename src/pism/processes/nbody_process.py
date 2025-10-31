@@ -11,6 +11,17 @@ class NBodyProcess(Process):
     rate per volume = k * prod_i(n_i) for i in species
 
     rate and heat are promoted from attributes to properties implemented to compute this pattern.
+
+    Parameters
+    ----------
+    colliding_species:
+        iterable of strings representing the colliding species.
+    rate_coefficient: sympy.core.symbol.Symbol, optional
+        Symbol symbol expression for k
+    heat_rate_coefficient: sympy.core.symbol.Symbol, optional
+        Symbol symbol expression for the heat rate coefficient = average radiated energy * k
+    name: str, optional
+        Name of the process
     """
 
     def __init__(self, colliding_species, rate_coefficient=0, heat_rate_coefficient=0, name: str = ""):

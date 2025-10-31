@@ -8,10 +8,10 @@ Welcome to pism's documentation!
    :caption: Contents:
 
 
-   installation
-   Quickstart
-   API
-   community
+   source/installation
+   source/Quickstart
+   source/API
+   source/community
 
 Indices and tables
 ==================
