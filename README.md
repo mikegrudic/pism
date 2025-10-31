@@ -20,3 +20,5 @@ Once you've constructed your system, `pism` can give you the symbolic equations 
 * Interfaces to convert from other existing chemistry network formats to the `Process` representation.
 * Solver robustness upgrades: thermochemical networks can be quite challenging numerically, due to how steeply terms switch on with increasing `T`. In can be hard to get a solution without good initial guesses.
 * If possible, glue interface allowing an existing compiled code to call the JAX solvers on-the-fly.
+
+pls halp.
