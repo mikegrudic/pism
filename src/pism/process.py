@@ -1,3 +1,5 @@
+# please autodoc me 
+
 """Implementation of base Process class with methods for managing and solving systems of equations"""
 
 from collections import defaultdict
@@ -18,6 +20,13 @@ class Process:
     """
 
     def __init__(self, name="", bibliography={}):
+        """Construct an empty Process instance
+        
+        Parameters
+        ----------
+        name: str, optional
+            Name of the process
+        """
         self.name = name
         self.initialize_network()
         self.dust_heat = 0
