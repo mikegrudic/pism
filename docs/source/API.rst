@@ -5,7 +5,7 @@ API Documentation
     :members: Process
        
 .. automodule:: pism.processes
-    :members:
-       
+    :members: Recombination
+
 .. automodule:: pism.numerics
-    :members:
+    :members: newton_rootsolve
