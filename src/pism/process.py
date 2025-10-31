@@ -198,7 +198,6 @@ class Process:
             raise ValueError("All known quantities and guesses must be arrays of equal length.")
 
         # need to implement broadcasting between knowns and guesses...
-
         # can supply just the species names, will convert to the number density symbol if necessary
         unknowns = tuple([sp.Symbol(f"n_{i}") for i in network])
         known_variables = tuple([sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities])
