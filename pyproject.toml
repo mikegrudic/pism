@@ -16,7 +16,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "jax", "sympy", "numpy"
+  "jax", "sympy", "numpy", "sphinx_rtd_theme"
 ]
 
 license = "MIT"
