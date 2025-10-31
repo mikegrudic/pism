@@ -201,7 +201,6 @@ class Process:
 
         # can supply just the species names, will convert to the number density symbol if necessary
         unknowns = tuple([sp.Symbol(f"n_{i}") for i in network])
-        print(unknowns)
         known_variables = tuple([sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities])
 
         func = sp.lambdify(unknowns + known_variables, list(network.values()), modules="jax")
