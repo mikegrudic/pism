@@ -1,4 +1,4 @@
-# please autodoc me 
+# please autodoc me
 
 """Implementation of base Process class with methods for managing and solving systems of equations"""
 
@@ -21,7 +21,7 @@ class Process:
 
     def __init__(self, name="", bibliography={}):
         """Construct an empty Process instance
-        
+
         Parameters
         ----------
         name: str, optional
