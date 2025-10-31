@@ -207,9 +207,10 @@ class Process:
         func = sp.lambdify(unknowns + known_variables, list(network.values()), modules="jax")
         @jax.jit
         def f_numerical(X, *params):
-            """Function to rootfind"""
+            """JAX function to rootfind"""
             return jnp.array(func(*X, *params))
         
+        # We also specify a function of the parameters to use for our stopping criterion: converge electron density to desired tolerance.
         tolfunc = sp.lambdify(unknowns+known_variables,self.apply_network_reductions(n_("e-")/n_("Htot")),modules='jax')
         @jax.jit
         def tolerance_func(X,*params):
