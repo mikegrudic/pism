@@ -66,7 +66,18 @@ collisional_ionization_rates = {
 
 
 def CollisionalIonization(species=None) -> Ionization:
-    """Return an ionization process representing collisional ionization of the input species"""
+    """Return an ionization process representing collisional ionization of the input species.
+    
+    Parameters
+    ----------
+    species: str, optional
+        Species being collisionally ionized. If None, we compose all collisional ionization processes for all ions rates are known.
+
+    Returns
+    -------
+    process: Ionization
+        `Ionization` instance describing the collisional ionization process
+    """
 
     if species is None:
         return sum([CollisionalIonization(s) for s in collisional_ionization_rates], Process())

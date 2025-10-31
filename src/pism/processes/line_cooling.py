@@ -20,6 +20,17 @@ def LineCoolingSimple(emitter: str, collider=None) -> NBodyProcess:
     This is the simple approximation where everything is well below critical density and no ambient radiation field.
     eventually would like to have a class that considers collisions from all available colliders, given just the
     energies, deexcitation coefficients, temperature, and statistical weights...
+
+    Parameters
+    ----------
+    emitter: str
+        Emitting excited species
+    collider: str, optional
+        Exciting colliding species. If None, will look up all known 
+
+    Returns
+    -------
+    An NBodyProcess instance whose heat attribute is the line cooling process's cooling rate in erg cm^-3
     """
 
     if emitter not in line_cooling_coeffs:
