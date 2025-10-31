@@ -26,7 +26,7 @@ def LineCoolingSimple(emitter: str, collider=None) -> NBodyProcess:
     emitter: str
         Emitting excited species
     collider: str, optional
-        Exciting colliding species. If None, will look up all known 
+        Exciting colliding species. If None, will look up all known
 
     Returns
     -------
