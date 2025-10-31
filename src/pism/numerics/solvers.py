@@ -1,7 +1,7 @@
 import jax, jax.numpy as jnp
 
 
-def newton_rootsolve(func, guesses, params=[], jacfunc=None, rtol=1e-6, atol=1e-100, max_iter=100):
+def newton_rootsolve(func, guesses, params=[], jacfunc=None, rtol=1e-6, atol=1e-30, max_iter=100, careful_steps=1):
     """
     Solve the system f(X,p) = 0 for X, where both f and X can be vectors of arbitrary length and p is a set of fixed
     parameters passed to f. Broadcasts and parallelizes over an arbitrary number of initial guesses and parameter
@@ -24,6 +24,8 @@ def newton_rootsolve(func, guesses, params=[], jacfunc=None, rtol=1e-6, atol=1e-
         Relative tolerance - can either be the same for all components of X, or a shape (n,) array specifying each.
     atol: float or array_like, optional
         Absolute tolerance - can either be the same for all components of X, or a shape (n,) array specifying each.
+    careful_steps: int, optional
+        Number of "careful" initial steps to take, gradually ramping up the step size in the Newton iteration
 
     Returns
     -------
@@ -46,16 +48,17 @@ def newton_rootsolve(func, guesses, params=[], jacfunc=None, rtol=1e-6, atol=1e-
         def iter_condition(arg):
             """Iteration condition for the while loop: check if we are within desired tolerance."""
             X, dx, num_iter = arg
-            return jnp.any(jnp.abs(dx) > rtol * jnp.abs(X) + atol) & (num_iter < max_iter)
+            return jnp.any(jnp.abs(dx) > rtol * jnp.abs(X) + atol) & (num_iter < max_iter) + (num_iter < careful_steps)
 
         def X_new(arg):
             """Returns the next Newton iterate and the difference from previous guess."""
             X, _, num_iter = arg
-            dx = -jnp.linalg.solve(jac(X, *params), func(X, *params))
+            fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
+            dx = -jnp.linalg.solve(jac(X, *params), func(X, *params)) * fac
             return X + dx, dx, num_iter + 1
 
         init_val = guess, 100 * guess, 0
-        X, dx, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
+        X, _, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
 
         return jnp.where(num_iter < max_iter, X, X * jnp.nan)
 

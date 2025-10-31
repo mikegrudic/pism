@@ -1,7 +1,12 @@
-"""Implementation of basic Process class"""
+"""Implementation of base Process class with methods for managing and solving systems of equations"""
 
 from collections import defaultdict
 import sympy as sp
+import jax
+import jax.numpy as jnp
+from .numerics import newton_rootsolve
+from .symbols import n_
+from .misc import is_an_ion
 
 
 class Process:
@@ -19,32 +24,27 @@ class Process:
         self.rate = 0
         self.heat = 0
         self.bibliography = bibliography
+        self.subprocesses = [self]
 
-    #        self.species = {}
-
-    def initialize_network(self):
-        self.network = defaultdict(int)  # this is a dict for which unknown keys are initialized to 0 by default
-
-    #    def finialize_network(self):
-    #        """Adds finishing simplifications on the network - e.g. substituting conservation equations for certain
-    #  species, and deleting extraneous equations in turn """
-    #    .network.replace(sp.symbols("n_e-"), sp.symbols("n_Htot")*sp.symbols("x_e")).replace(sp.symbols("n_H+"), sp.symbols("n_Htot")*sp.symbols("x_e")).replace(sp.symbols("n_H"), sp.symbols("n_Htot")*sp.symbols("(1-x_e)")
+    def __repr__(self):
+        """Print the name in print()"""
+        return self.name
 
     def __add__(self, other):
         """Sum 2 processes together: define a new process whose rates are the sum of the input process"""
         if other == 0:  # necessary for native sum() routine to work
             return self
 
-        quantities_to_sum = "heat", "dust_heat"  # all energy exchange terms
+        attrs_to_sum = "heat", "dust_heat", "subprocesses"  # all energy exchange terms
 
         sum_process = Process()
-        sum_process.rate = None  # no longer meaningful to define a single rate
-        for summed_quantity in quantities_to_sum:
-            attr1, attr2 = getattr(self, summed_quantity), getattr(other, summed_quantity)
+        sum_process.rate = None  # "rate" ceases to be meaningful for composite processes
+        for summed_attr in attrs_to_sum:
+            attr1, attr2 = getattr(self, summed_attr), getattr(other, summed_attr)
             if attr1 is None or attr2 is None:
-                setattr(sum_process, summed_quantity, None)
+                setattr(sum_process, summed_attr, None)
             else:
-                setattr(sum_process, summed_quantity, attr1 + attr2)
+                setattr(sum_process, summed_attr, attr1 + attr2)
 
         # now combine the networks
         sum_process.network = self.combine_networks(self.network, other.network)
@@ -53,6 +53,9 @@ class Process:
 
     def __radd__(self, other):
         return self.__add__(other)
+
+    def initialize_network(self):
+        self.network = defaultdict(int)  # this is a dict for which unknown keys are initialized to 0 by default
 
     def combine_networks(self, n1, n2):
         combined_network = defaultdict(int)
@@ -64,11 +67,159 @@ class Process:
     def print_network_equations(self):
         """Prints the system of equations in the chemistry network"""
         for k, rhs in self.network.items():
-            print(sp.symbols(f"dn_{k}/dt"), "=", sp.simplify(rhs))
+            if k == "heat":
+                lhs = sp.symbols("d(⍴u)/dt")
+            else:
+                lhs = sp.symbols(f"dn_{k}/dt")
+            print(lhs, "=", rhs)
 
     def network_species(self):
         return list(self.network.keys())
 
-    def solve_steadystate(self, known_quantities={}, x0={}):
-        """Solves for a steady state of the network"""
-        return
+    @property
+    def network_ions(self):
+        """Returns the list of ions involved in a process"""
+        return [s for s in self.network if is_an_ion(s)]
+
+    @property
+    def network_reduction_replacements(self):
+        """Replacements for reducing the chemistry network with conservation laws"""
+        Y = sp.symbols("Y")  # general: mass fractions of different atoms other than H. n_i,tot = n_i + sum(n_ions of i)
+        nHtot = sp.symbols("n_Htot")  # basically always want this
+
+        substitutions = {
+            n_("e-"): n_("H+") + n_("He+") + 2 * n_("He++"),
+            # n_("He+"): n_("e-") - n_("H+") - 2 * n_("He++"),
+            n_("H+"): nHtot - n_("H"),
+            n_("He++"): Y / (4 - 4 * Y) * nHtot - sp.symbols("n_He") - sp.symbols("n_He+"),
+        }
+        return substitutions
+
+    def apply_network_reductions(self, expr):
+        """Applies the replacements given by network_reduction_replacements to a symbolic expression"""
+        out = expr
+        for _ in range(2):  # 2 passes to avoid ordering issues
+            for n, r in self.network_reduction_replacements.items():
+                out = out.subs(n, r)
+        return out
+
+    @property
+    def reduced_network(self):
+        """
+        Returns the chemistry network after substituting known conservation laws:
+
+        n_atom = sum(n_{species containing atom} * number of atoms in species)
+        n_e- = sum(ion charge * n_ion) - want to keep n_e- in the explicit updates, so eliminate the highest ions?
+
+        This reduces the network of N rate equations to N - (num_atoms + 1).
+        """
+
+        replacements = self.network_reduction_replacements
+
+        reduced_network = {}
+        for s, rhs in self.network.items():
+            if n_(s) in replacements:
+                continue
+            else:
+                rhs = self.apply_network_reductions(rhs)
+            reduced_network[s] = rhs
+        return reduced_network
+
+    def thermochem_network(self, reduced=True):
+        """Returns the network including thermochemistry and"""
+        if reduced:
+            network = self.reduced_network
+        else:
+            network = self.network
+        return network | {"heat": self.apply_network_reductions(self.heat)}  # combine the dicts
+
+    def chemical_equilibrium(
+        self,
+        known_quantities,
+        guess,
+        input_abundances=True,
+        output_abundances=True,
+        reduce_network=True,
+        tol=1e-3,
+        careful_steps=10,
+    ):
+        """
+        Solves the chemical equilibrium after substituting a set of known quantities, e.g. temperature, metallicity,
+        etc.
+
+        Parameters
+        ----------
+        known_quantities: dict
+            Dict of symbolic quantities and their values that will be plugged into the network solve as known quantities.
+            Can be arrays if you want to substitute multiple values.
+        guess: dict, optional
+            Dict of symbolic quantities and their values that will be plugged into the network solve as guesses for the
+            unknown quantities. Can be arrays if you want to substitute multiple values. Will default to trying sensible
+            guesses for recognized quantities.
+        normalize_to_H: bool, optional
+            Whether to return abundances normalized by the number density of H nucleons (default: True)
+        reduce_network: bool, optional
+            Whether to solve the reduced version of the network substituting conservation laws (default: True)
+        tol: float, optional
+            Desired relative error in chemical abundances (default: 1e-3)
+        careful_steps: int, optional
+            Number of careful initial steps in the Newton solve before full step size is used - try increasing this if
+            your solve has trouble converging.
+
+        Returns
+        -------
+        equilibrium_abundances: dict
+            Dict of species and their equilibrium abundances relative to H or raw number densities (depending on
+            value of normalize_to_H)
+        """
+        if reduce_network:
+            network = self.reduced_network
+        else:
+            network = self.network
+
+        if not isinstance(known_quantities, dict):
+            raise ValueError("known_quantities argument to chemical_equilibrium must be a dictionary.")
+        lengths = [len(k) for k in known_quantities.values()]
+
+        if guess is not None:
+            if not isinstance(guess, dict):
+                raise ValueError("If supplied, guess argument to chemical_equilibrium must be a dictionary.")
+            lengths += [len(g) for g in guess.values()]
+        if not all([l == lengths[0] for l in lengths]):
+            raise ValueError("All known quantities and guesses must be arrays of equal length.")
+
+        # need to implement broadcasting between knowns and guesses...
+
+        # can supply just the species names, will convert to the number density symbol if necessary
+        unknowns = tuple([sp.symbols(f"n_{i}") for i in network])
+        known_variables = tuple([sp.symbols(k) if isinstance(k, str) else k for k in known_quantities])
+
+        func = sp.lambdify(unknowns + known_variables, list(network.values()), modules="jax")
+        # establishes the required array ordering for guesses and knowns
+
+        @jax.jit
+        def f_numerical(X, *params):
+            return jnp.array(func(*X, *params))
+
+        guesses = jnp.array([guess[i] for i in network]).T
+        if input_abundances:
+            guesses *= known_quantities["n_Htot"][:, None]  # convert to density
+        params = jnp.array(list(known_quantities.values())).T
+        sol = newton_rootsolve(f_numerical, guesses, params, rtol=tol, careful_steps=careful_steps)
+
+        # get solution into dict form
+        sol = {species: sol[:, i] for i, species in enumerate(network)}
+        # now get the missing species that we eliminated - this needs to be generalized...
+        nHtot = known_quantities["n_Htot"]
+        sol["H+"] = nHtot - sol["H"]
+        sol["e-"] = sol["H+"]
+        if "Y" in known_quantities:
+            Y = known_quantities["Y"]
+            y = Y / (4 - 4 * Y)
+            sol["He++"] = y * nHtot - sol["He"] - sol["He+"]
+            sol["e-"] += 2 * sol["He++"] + sol["He+"]
+
+        if output_abundances:
+            for species, n in sol.items():
+                sol[species] = n / nHtot
+        return sol

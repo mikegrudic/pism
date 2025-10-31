@@ -24,6 +24,10 @@ def species_charge(species: str) -> int:
         return -int(suffix.rstrip("-"))
 
 
+def is_an_ion(species: str) -> bool:
+    return species_charge(species) != 0 and species != "e-"
+
+
 def base_species(species: str) -> str:
     """Removes the charge suffix from a species"""
     base = species.rstrip(digits + "-+")
