@@ -134,15 +134,15 @@ class Process:
             reduced_network[s] = rhs
         return reduced_network
 
-    def thermochem_network(self, reduced=True):
-        """Returns the network including thermochemistry and"""
+    def get_thermochem_network(self, reduced=True):
+        """Returns the network including all chemical processes plus the gas heating-cooling equation"""
         if reduced:
             network = self.reduced_network
         else:
             network = self.network
         return network | {"heat": self.apply_network_reductions(self.heat)}  # combine the dicts
 
-    def chemical_equilibrium(
+    def steadystate(
         self,
         known_quantities,
         guess,
@@ -153,14 +153,15 @@ class Process:
         careful_steps=10,
     ):
         """
-        Solves the chemical equilibrium after substituting a set of known quantities, e.g. temperature, metallicity,
+        Solves for equilibrium after substituting a set of known quantities, e.g. temperature, metallicity,
         etc.
 
         Parameters
         ----------
         known_quantities: dict
             Dict of symbolic quantities and their values that will be plugged into the network solve as known quantities.
-            Can be arrays if you want to substitute multiple values.
+            Can be arrays if you want to substitute multiple values. If T is included here, we solve for chemical
+            equilibrium. If T is not included, solve for thermochemical equilibrium.
         guess: dict, optional
             Dict of symbolic quantities and their values that will be plugged into the network solve as guesses for the
             unknown quantities. Can be arrays if you want to substitute multiple values. Will default to trying sensible
@@ -209,10 +210,10 @@ class Process:
             """JAX function to rootfind"""
             return jnp.array(func(*X, *params))
 
-        # We also specify a function of the parameters to use for our stopping criterion: converge electron density to desired tolerance.
-        tolfunc = sp.lambdify(
-            unknowns + known_variables, self.apply_network_reductions(n_("e-") / n_("Htot")), modules="jax"
-        )
+        # We also specify a function of the parameters to use for our stopping criterion:
+        # converge electron and H abundance to desired tolerance.
+        tolerance_var = [self.apply_network_reductions(n_("e-")), n_("H")]
+        tolfunc = sp.lambdify(unknowns + known_variables, tolerance_var, modules="jax")
 
         @jax.jit
         def tolerance_func(X, *params):
