@@ -13,7 +13,7 @@ class Recombination(NBodyProcess):
     Class describing a recombination process: ion + e- -> recombined species + hν
 
     Implements method for setting the chemistry network terms
-    
+
     Parameters
     ----------
     ion: str
@@ -51,7 +51,7 @@ class Recombination(NBodyProcess):
 
 def GasPhaseRecombination(ion=None) -> Recombination:
     """Return a recombination process representing gas-phase (e.g. radiative) recombination
-    
+
     Parameters
     ----------
     ion: str, optional
@@ -61,7 +61,7 @@ def GasPhaseRecombination(ion=None) -> Recombination:
     Returns
     -------
     process: Recombination
-        `Process` instance describing the gas-phase recombination process 
+        `Process` instance describing the gas-phase recombination process
     """
     if ion is None:
         return sum([GasPhaseRecombination(s) for s in gasphase_recombination_rates], Process())

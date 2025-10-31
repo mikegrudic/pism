@@ -13,7 +13,7 @@ def gaunt_factor(T):
 
 def FreeFreeEmission(ion: str) -> NBodyProcess:
     """Returns a free-free emisison process (i.e. bremmsstrahlung) for the input ion
-    
+
     Parameters
     ----------
     ion: str

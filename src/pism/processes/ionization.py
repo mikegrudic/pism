@@ -67,7 +67,7 @@ collisional_ionization_rates = {
 
 def CollisionalIonization(species=None) -> Ionization:
     """Return an ionization process representing collisional ionization of the input species.
-    
+
     Parameters
     ----------
     species: str, optional
