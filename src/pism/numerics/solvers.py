@@ -1,7 +1,9 @@
 import jax, jax.numpy as jnp
 
 
-def newton_rootsolve(func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=1e-6, atol=1e-30, max_iter=100, careful_steps=1):
+def newton_rootsolve(
+    func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=1e-6, atol=1e-30, max_iter=100, careful_steps=1
+):
     """
     Solve the system f(X,p) = 0 for X, where both f and X can be vectors of arbitrary length and p is a set of fixed
     parameters passed to f. Broadcasts and parallelizes over an arbitrary number of initial guesses and parameter
@@ -43,8 +45,9 @@ def newton_rootsolve(func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=
         jac = jax.jacfwd(func)
 
     if tolfunc is None:
-        def tolfunc(X,*params):
-            return atol*10 # always satisfied, so 
+
+        def tolfunc(X, *params):
+            return atol * 10  # always satisfied, so
 
     def solve(guess, params):
         """Function to be called in parallel that solves the root problem for one guess and set of parameters"""
@@ -53,7 +56,9 @@ def newton_rootsolve(func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=
             """Iteration condition for the while loop: check if we are within desired tolerance."""
             X, dx, num_iter = arg
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
-            return jnp.any(jnp.abs(dx) > fac*rtol * jnp.abs(X)) & (num_iter < max_iter) & (tolfunc(X,*params) > atol)
+            return (
+                jnp.any(jnp.abs(dx) > fac * rtol * jnp.abs(X)) & (num_iter < max_iter) & (tolfunc(X, *params) > atol)
+            )
 
         def X_new(arg):
             """Returns the next Newton iterate and the difference from previous guess."""
@@ -71,4 +76,6 @@ def newton_rootsolve(func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=
     return X
 
 
-newton_rootsolve = jax.jit(newton_rootsolve, static_argnames=["func", "tolfunc", "jacfunc", "atol", "max_iter", "careful_steps"])
+newton_rootsolve = jax.jit(
+    newton_rootsolve, static_argnames=["func", "tolfunc", "jacfunc", "atol", "max_iter", "careful_steps"]
+)
