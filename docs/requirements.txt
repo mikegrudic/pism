@@ -1,0 +1,10 @@
+ipython
+sphinx-build
+sphinx_rtd_theme
+numba
+numpy
+scipy
+astropy
+jax
+sympy
+matplotlib
