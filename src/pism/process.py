@@ -68,9 +68,9 @@ class Process:
         """Prints the system of equations in the chemistry network"""
         for k, rhs in self.network.items():
             if k == "heat":
-                lhs = sp.symbols("d(⍴u)/dt")
+                lhs = sp.Symbol("d(⍴u)/dt")
             else:
-                lhs = sp.symbols(f"dn_{k}/dt")
+                lhs = sp.Symbol(f"dn_{k}/dt")
             print(lhs, "=", rhs)
 
     def network_species(self):
@@ -84,14 +84,14 @@ class Process:
     @property
     def network_reduction_replacements(self):
         """Replacements for reducing the chemistry network with conservation laws"""
-        Y = sp.symbols("Y")  # general: mass fractions of different atoms other than H. n_i,tot = n_i + sum(n_ions of i)
-        nHtot = sp.symbols("n_Htot")  # basically always want this
+        Y = sp.Symbol("Y")  # general: mass fractions of different atoms other than H. n_i,tot = n_i + sum(n_ions of i)
+        nHtot = sp.Symbol("n_Htot")  # basically always want this
 
         substitutions = {
             n_("e-"): n_("H+") + n_("He+") + 2 * n_("He++"),
             # n_("He+"): n_("e-") - n_("H+") - 2 * n_("He++"),
             n_("H+"): nHtot - n_("H"),
-            n_("He++"): Y / (4 - 4 * Y) * nHtot - sp.symbols("n_He") - sp.symbols("n_He+"),
+            n_("He++"): Y / (4 - 4 * Y) * nHtot - sp.Symbol("n_He") - sp.Symbol("n_He+"),
         }
         return substitutions
 
@@ -191,8 +191,8 @@ class Process:
         # need to implement broadcasting between knowns and guesses...
 
         # can supply just the species names, will convert to the number density symbol if necessary
-        unknowns = tuple([sp.symbols(f"n_{i}") for i in network])
-        known_variables = tuple([sp.symbols(k) if isinstance(k, str) else k for k in known_quantities])
+        unknowns = tuple([sp.Symbol(f"n_{i}") for i in network])
+        known_variables = tuple([sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities])
 
         func = sp.lambdify(unknowns + known_variables, list(network.values()), modules="jax")
         # establishes the required array ordering for guesses and knowns

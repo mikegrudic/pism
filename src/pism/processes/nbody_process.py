@@ -29,14 +29,14 @@ class NBodyProcess(Process):
         """Returns the number of events per unit time and volume"""
         if self.rate_coefficient is None:
             return None
-        return self.rate_coefficient * sp.prod([sp.symbols("n_" + c) for c in self.colliding_species])
+        return self.rate_coefficient * sp.prod([sp.Symbol("n_" + c) for c in self.colliding_species])
 
     @property
     def heat(self):
         """Returns the number of events per unit time and volume"""
         if self.heat_rate_coefficient is None:
             return None
-        return self.heat_rate_coefficient * sp.prod([sp.symbols("n_" + c) for c in self.colliding_species])
+        return self.heat_rate_coefficient * sp.prod([sp.Symbol("n_" + c) for c in self.colliding_species])
 
     @property
     def num_colliding_species(self):

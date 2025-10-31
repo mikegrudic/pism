@@ -14,7 +14,7 @@ class ThermalProcess(Process):
 
 
 PdV_heating = ThermalProcess(
-    sp.symbols("C_1") * c_s**2 * sp.sqrt(4 * sp.pi * G * ρ), name="Grav. Compression"
+    sp.Symbol("C_1") * c_s**2 * sp.sqrt(4 * sp.pi * G * ρ), name="Grav. Compression"
 )  # 1998ApJ...495..346M
 
 inv_compton_cooling = ThermalProcess(
