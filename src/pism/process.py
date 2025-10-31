@@ -204,23 +204,29 @@ class Process:
         known_variables = tuple([sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities])
 
         func = sp.lambdify(unknowns + known_variables, list(network.values()), modules="jax")
+
         @jax.jit
         def f_numerical(X, *params):
             """JAX function to rootfind"""
             return jnp.array(func(*X, *params))
-        
+
         # We also specify a function of the parameters to use for our stopping criterion: converge electron density to desired tolerance.
-        tolfunc = sp.lambdify(unknowns+known_variables,self.apply_network_reductions(n_("e-")/n_("Htot")),modules='jax')
+        tolfunc = sp.lambdify(
+            unknowns + known_variables, self.apply_network_reductions(n_("e-") / n_("Htot")), modules="jax"
+        )
+
         @jax.jit
-        def tolerance_func(X,*params):
+        def tolerance_func(X, *params):
             """Solution will terminate if the relative change in this quantity is < tol"""
-            return jnp.array(tolfunc(*X,*params))
+            return jnp.array(tolfunc(*X, *params))
 
         guesses = jnp.array([guess[i] for i in network]).T
         if input_abundances:
             guesses *= known_quantities["n_Htot"][:, None]  # convert to density
         params = jnp.array(list(known_quantities.values())).T
-        sol = newton_rootsolve(f_numerical, guesses, params, tolfunc=tolerance_func, atol=tol, careful_steps=careful_steps)
+        sol = newton_rootsolve(
+            f_numerical, guesses, params, tolfunc=tolerance_func, atol=tol, careful_steps=careful_steps
+        )
 
         # get solution into dict form
         sol = {species: sol[:, i] for i, species in enumerate(network)}
