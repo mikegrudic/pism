@@ -1,5 +1,4 @@
 ipython
-sphinx-build
 sphinx_rtd_theme
 numba
 numpy
