@@ -1,7 +1,7 @@
 API Documentation
 =================
 
-.. automodule:: pism
+.. automodule:: pism.Process
     :members:
        
 .. automodule:: pism.processes
