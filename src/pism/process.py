@@ -204,7 +204,9 @@ class Process:
             unknowns.append("T")
         known_variables = [sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities]
 
-        func = sp.lambdify(unknowns + known_variables, list(network_tosolve.values()), modules="jax")  # , dummify=True)
+        func = sp.lambdify(
+            unknowns + known_variables, list(network_tosolve.values()), modules="jax"
+        )  # , dummify=True)
 
         @jax.jit
         def f_numerical(X, *params):
