@@ -54,7 +54,7 @@ def newton_rootsolve(
     if tolfunc is None:
 
         def tolfunc(X, *params):
-            return atol * 10  # always satisfied
+            return X
 
     def solve(guess, params):
         """Function to be called in parallel that solves the root problem for one guess and set of parameters"""
@@ -62,8 +62,8 @@ def newton_rootsolve(
         def iter_condition(arg):
             """Iteration condition for the while loop: check if we are within desired tolerance."""
             X, dx, num_iter = arg
-            tol2, tol1 = tolfunc(X, *params), tolfunc(X - dx, *params)
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
+            tol2, tol1 = tolfunc(X, *params), tolfunc(X - dx, *params)
             tolcheck = jnp.any(jnp.abs(tol1 - tol2) > rtol * jnp.abs(tol1) * fac)
             return jnp.any(jnp.abs(dx) > fac * rtol * jnp.abs(X)) & (num_iter < max_iter) & tolcheck
 
