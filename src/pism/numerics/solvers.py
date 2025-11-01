@@ -8,7 +8,7 @@ def newton_rootsolve(
     jacfunc=None,
     tolfunc=None,
     rtol=1e-6,
-    max_iter=100,
+    max_iter=1000,
     careful_steps=1,
 ):
     """
@@ -71,14 +71,16 @@ def newton_rootsolve(
             """Returns the next Newton iterate and the difference from previous guess."""
             X, _, num_iter = arg
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
-            dx = -jnp.linalg.solve(jac(X, *params), func(X, *params)) * fac
+            J = jac(X, *params)
+            cond = jnp.linalg.cond(J)
+            dx = jnp.where(cond < 1e37, -jnp.linalg.solve(J, func(X, *params)) * fac, jnp.zeros_like(X))
             # need to reject steps that increase the residual...
-            return X + dx, dx, num_iter + 1
+            return (X + dx).clip(1e-37, 1e37), dx, num_iter + 1
 
         init_val = guess, 100 * guess, 0
         X, _, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
 
-        return jnp.where(num_iter < max_iter, X, X * jnp.nan)
+        return X  # jnp.where(num_iter < max_iter, X, X * jnp.nan)
 
     X = jax.vmap(solve)(guesses, params)
     return X

@@ -8,7 +8,7 @@ import sympy as sp
 
 def gaunt_factor(T):
     """Fit to data in table 3.3 of Spitzer (1978)"""
-    return 1.1 + 0.34 * sp.exp((-5.5 - sp.log(T) / sp.log(10)) ** 2 / 3.0)  # 1996ApJS..105...19K
+    return 1.1 + 0.34 * sp.exp(-((5.5 - (sp.log(T) / sp.log(10)) ** 2) ** 2) / 3.0)  # 1996ApJS..105...19K
 
 
 def FreeFreeEmission(ion: str) -> NBodyProcess:
