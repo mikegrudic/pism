@@ -2,7 +2,14 @@ import jax, jax.numpy as jnp
 
 
 def newton_rootsolve(
-    func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=1e-6, atol=1e-30, max_iter=100, careful_steps=1
+    func,
+    guesses,
+    params=[],
+    jacfunc=None,
+    tolfunc=None,
+    rtol=1e-6,
+    max_iter=1000,
+    careful_steps=1,
 ):
     """
     Solve the system f(X,p) = 0 for X, where both f and X can be vectors of arbitrary length and p is a set of fixed
@@ -47,7 +54,7 @@ def newton_rootsolve(
     if tolfunc is None:
 
         def tolfunc(X, *params):
-            return atol * 10  # always satisfied, so
+            return X
 
     def solve(guess, params):
         """Function to be called in parallel that solves the root problem for one guess and set of parameters"""
@@ -56,26 +63,29 @@ def newton_rootsolve(
             """Iteration condition for the while loop: check if we are within desired tolerance."""
             X, dx, num_iter = arg
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
-            return (
-                jnp.any(jnp.abs(dx) > fac * rtol * jnp.abs(X)) & (num_iter < max_iter) & (tolfunc(X, *params) > atol)
-            )
+            tol2, tol1 = tolfunc(X, *params), tolfunc(X - dx, *params)
+            tolcheck = jnp.any(jnp.abs(tol1 - tol2) > rtol * jnp.abs(tol1) * fac)
+            return jnp.any(jnp.abs(dx) > fac * rtol * jnp.abs(X)) & (num_iter < max_iter) & tolcheck
 
         def X_new(arg):
             """Returns the next Newton iterate and the difference from previous guess."""
             X, _, num_iter = arg
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
-            dx = -jnp.linalg.solve(jac(X, *params), func(X, *params)) * fac
-            return X + dx, dx, num_iter + 1
+            J = jac(X, *params)
+            cond = jnp.linalg.cond(J)
+            dx = jnp.where(cond < 1e37, -jnp.linalg.solve(J, func(X, *params)) * fac, jnp.zeros_like(X))
+            # need to reject steps that increase the residual...
+            return (X + dx).clip(1e-37, 1e37), dx, num_iter + 1
 
         init_val = guess, 100 * guess, 0
         X, _, num_iter = jax.lax.while_loop(iter_condition, X_new, init_val)
 
-        return jnp.where(num_iter < max_iter, X, X * jnp.nan)
+        return X  # jnp.where(num_iter < max_iter, X, X * jnp.nan)
 
     X = jax.vmap(solve)(guesses, params)
     return X
 
 
 newton_rootsolve = jax.jit(
-    newton_rootsolve, static_argnames=["func", "tolfunc", "jacfunc", "atol", "max_iter", "careful_steps"]
+    newton_rootsolve, static_argnames=["func", "tolfunc", "jacfunc", "max_iter", "careful_steps"]
 )
