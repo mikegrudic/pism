@@ -140,7 +140,7 @@ class Process:
             network = self.reduced_network
         else:
             network = self.network
-        return network | {"heat": self.apply_network_reductions(self.heat)}  # combine the dicts
+        return network | {"T": self.apply_network_reductions(self.heat)}  # combine the dicts
 
     def steadystate(
         self,
@@ -182,28 +182,29 @@ class Process:
             Dict of species and their equilibrium abundances relative to H or raw number densities (depending on
             value of normalize_to_H)
         """
-        if reduce_network:
-            network = self.reduced_network
+        if "T" in known_quantities:
+            thermo = False  # do a chemistry solve with T fixed
+            if reduce_network:
+                network_tosolve = self.reduced_network
+            else:
+                network_tosolve = self.network
         else:
-            network = self.network
+            thermo = True  # solve for equilibrium T as well
+            network_tosolve = self.get_thermochem_network(reduced=reduce_network)
 
-        if not isinstance(known_quantities, dict):
-            raise ValueError("known_quantities argument to chemical_equilibrium must be a dictionary.")
-        lengths = [len(k) for k in known_quantities.values()]
+        self.do_solver_value_checks(known_quantities, guess)
 
-        if guess is not None:
-            if not isinstance(guess, dict):
-                raise ValueError("If supplied, guess argument to chemical_equilibrium must be a dictionary.")
-            lengths += [len(g) for g in guess.values()]
-        if not all([l == lengths[0] for l in lengths]):
-            raise ValueError("All known quantities and guesses must be arrays of equal length.")
+        #        for k in known_quantities:
+        #            if k in
 
         # need to implement broadcasting between knowns and guesses...
         # can supply just the species names, will convert to the number density symbol if necessary
-        unknowns = tuple([sp.Symbol(f"n_{i}") for i in network])
-        known_variables = tuple([sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities])
+        unknowns = [sp.Symbol(f"n_{i}") for i in self.reduced_network]
+        if thermo:
+            unknowns.append("T")
+        known_variables = [sp.Symbol(k) if isinstance(k, str) else k for k in known_quantities]
 
-        func = sp.lambdify(unknowns + known_variables, list(network.values()), modules="jax")
+        func = sp.lambdify(unknowns + known_variables, list(network_tosolve.values()), modules="jax")  # , dummify=True)
 
         @jax.jit
         def f_numerical(X, *params):
@@ -212,24 +213,29 @@ class Process:
 
         # We also specify a function of the parameters to use for our stopping criterion:
         # converge electron and H abundance to desired tolerance.
-        tolerance_var = [self.apply_network_reductions(n_("e-")), n_("H")]
-        tolfunc = sp.lambdify(unknowns + known_variables, tolerance_var, modules="jax")
+        tolerance_vars = [self.apply_network_reductions(n_("e-")), n_("H")]
+        if thermo:
+            tolerance_vars += [sp.Symbol("T")]
+        tolfunc = sp.lambdify(unknowns + known_variables, tolerance_vars, modules="jax")
 
         @jax.jit
         def tolerance_func(X, *params):
             """Solution will terminate if the relative change in this quantity is < tol"""
             return jnp.array(tolfunc(*X, *params))
 
-        guesses = jnp.array([guess[i] for i in network]).T
-        if input_abundances:
-            guesses *= known_quantities["n_Htot"][:, None]  # convert to density
+        guesses = []
+        for i in network_tosolve:
+            guesses.append(guess[i])
+            if input_abundances and i in self.network:
+                guesses[-1] *= known_quantities["n_Htot"]  # convert to density
+        guesses = jnp.array(guesses).T
         params = jnp.array(list(known_quantities.values())).T
         sol = newton_rootsolve(
-            f_numerical, guesses, params, tolfunc=tolerance_func, atol=tol, careful_steps=careful_steps
+            f_numerical, guesses, params, tolfunc=tolerance_func, rtol=tol, careful_steps=careful_steps
         )
 
         # get solution into dict form
-        sol = {species: sol[:, i] for i, species in enumerate(network)}
+        sol = {species: sol[:, i] for i, species in enumerate(network_tosolve)}
         # now get the missing species that we eliminated - this needs to be generalized...
         nHtot = known_quantities["n_Htot"]
         sol["H+"] = nHtot - sol["H"]
@@ -242,5 +248,18 @@ class Process:
 
         if output_abundances:
             for species, n in sol.items():
-                sol[species] = n / nHtot
+                if species != "T":
+                    sol[species] = n / nHtot
         return sol
+
+    def do_solver_value_checks(self, known_quantities, guess):
+        if not isinstance(known_quantities, dict):
+            raise ValueError("known_quantities argument to chemical_equilibrium must be a dictionary.")
+        lengths = [len(k) for k in known_quantities.values()]
+
+        if guess is not None:
+            if not isinstance(guess, dict):
+                raise ValueError("If supplied, guess argument to chemical_equilibrium must be a dictionary.")
+            lengths += [len(g) for g in guess.values()]
+        if not all([l == lengths[0] for l in lengths]):
+            raise ValueError("All known quantities and guesses must be arrays of equal length.")

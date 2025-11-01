@@ -2,7 +2,14 @@ import jax, jax.numpy as jnp
 
 
 def newton_rootsolve(
-    func, guesses, params=[], jacfunc=None, tolfunc=None, rtol=1e-6, atol=1e-30, max_iter=100, careful_steps=1
+    func,
+    guesses,
+    params=[],
+    jacfunc=None,
+    tolfunc=None,
+    rtol=1e-6,
+    max_iter=100,
+    careful_steps=1,
 ):
     """
     Solve the system f(X,p) = 0 for X, where both f and X can be vectors of arbitrary length and p is a set of fixed
@@ -56,8 +63,8 @@ def newton_rootsolve(
             """Iteration condition for the while loop: check if we are within desired tolerance."""
             X, dx, num_iter = arg
             tol2, tol1 = tolfunc(X, *params), tolfunc(X - dx, *params)
-            tolcheck = jnp.any(jnp.abs(tol1 - tol2) > atol * jnp.abs(tol1))
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
+            tolcheck = jnp.any(jnp.abs(tol1 - tol2) > rtol * jnp.abs(tol1) * fac)
             return jnp.any(jnp.abs(dx) > fac * rtol * jnp.abs(X)) & (num_iter < max_iter) & tolcheck
 
         def X_new(arg):
@@ -65,6 +72,7 @@ def newton_rootsolve(
             X, _, num_iter = arg
             fac = jnp.min(jnp.array([(num_iter + 1.0) / careful_steps, 1.0]))
             dx = -jnp.linalg.solve(jac(X, *params), func(X, *params)) * fac
+            # need to reject steps that increase the residual...
             return X + dx, dx, num_iter + 1
 
         init_val = guess, 100 * guess, 0
@@ -77,5 +85,5 @@ def newton_rootsolve(
 
 
 newton_rootsolve = jax.jit(
-    newton_rootsolve, static_argnames=["func", "tolfunc", "jacfunc", "atol", "max_iter", "careful_steps"]
+    newton_rootsolve, static_argnames=["func", "tolfunc", "jacfunc", "max_iter", "careful_steps"]
 )
