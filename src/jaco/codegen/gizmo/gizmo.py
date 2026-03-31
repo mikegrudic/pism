@@ -3,6 +3,7 @@
 from jaco.models.wind_comparison import cooling, heating
 from sympy.utilities.codegen import C99CodeGen
 from sympy.codegen.ast import Assignment
+from jaco.codegen.printers import JacoCCodePrinter
 import sympy as sp
 
 
@@ -30,9 +31,17 @@ def generate_funcjac_code(system, cse=True):
         funcjac = funcjac.subs(p, P[i])
         assignments.append(Assignment(P[i], p))
         index_defs.append(f"#define INDEX_{p} {i}")
-    cg = C99CodeGen(cse=cse)
+    c_printer = JacoCCodePrinter()
+    cg = C99CodeGen(cse=cse, printer=c_printer)
     routine = cg.routine("microphysics_func_jac", funcjac)  # cg.routine("func",sp.Matrix(func + sp.flatten(jac)))
     cg.write([routine], "microphysics_func_jac", to_files=True)
+
+    # Write table declarations and helper functions to a separate header
+    table_preamble = c_printer.get_table_declarations_c()
+    if table_preamble:
+        with open("jaco_interp.h", "w") as F:
+            F.write("#pragma once\n")
+            F.write(table_preamble + "\n")
 
     with open("indices.h", "w") as F:
         for i in index_defs:

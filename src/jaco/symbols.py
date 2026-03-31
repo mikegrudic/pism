@@ -2,10 +2,11 @@
 
 import sympy as sp
 from typing import Union
-import sympy as sp
 from astropy.constants import k_B, m_p
 from astropy import units as u
 import numpy as np
+
+from jaco.interpolation import PiecewiseLinearInterp
 
 T = sp.Symbol("T")  # temperature
 T5 = T / 10**5
@@ -93,19 +94,10 @@ def piecewise_linear(X, Y, x, extrapolate=False):
     if len(X) != len(Y):
         raise ValueError("X and Y must have the same length.")
 
-    slopes = np.diff(Y) / np.diff(X)
-    cases = []
-    if extrapolate:
-        cases.append((Y[0] + slopes[0] * (x - X[0]), x < X[0]))
-        cases.append((Y[-1] + slopes[-1] * (x - X[-1]), x >= X[-1]))
-    else:
-        cases.append((Y[0], x < X[0]))
-        cases.append((Y[-1], x >= X[-1]))
-
-    for i in range(len(X) - 1):
-        cases.append((Y[i] + slopes[i] * (x - X[i]), (x >= X[i]) & (x < X[i + 1])))
-    #    cases.append((sp.nan, True))
-    return sp.Piecewise(*cases)
+    X_tuple = sp.Tuple(*[sp.Float(v) for v in X])
+    Y_tuple = sp.Tuple(*[sp.Float(v) for v in Y])
+    extrap_flag = sp.Integer(1 if extrapolate else 0)
+    return PiecewiseLinearInterp(x, X_tuple, Y_tuple, extrap_flag)
 
 
 def piecewise_powerlaw(X, Y, x, extrapolate=False):
