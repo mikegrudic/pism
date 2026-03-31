@@ -7,6 +7,7 @@ from astropy import units as u
 import numpy as np
 
 from jaco.interpolation import PiecewiseLinearInterp
+from sympy.core.symbol import Str
 
 T = sp.Symbol("T")  # temperature
 T5 = T / 10**5
@@ -74,7 +75,7 @@ def sanitize_symbols(expr):
     return expr
 
 
-def piecewise_linear(X, Y, x, extrapolate=False):
+def piecewise_linear(X, Y, x, extrapolate=False, name=None):
     """
     Returns a symbolic expression describing a piecewise-linear interpolant of data X and Y
 
@@ -88,6 +89,8 @@ def piecewise_linear(X, Y, x, extrapolate=False):
         Symbol for the independent variable associated with X
     extrapolate: Boolean, optional
         Whether to use a linear extrapolant past the limits, or simply limit to the outermost values
+    name: str, optional
+        Descriptive name for the interpolant, used in generated code identifiers
     """
     if not np.all(np.diff(X) > 0):
         raise ValueError("X values passed to piecewise_linear must be monotonic.")
@@ -97,10 +100,13 @@ def piecewise_linear(X, Y, x, extrapolate=False):
     X_tuple = sp.Tuple(*[sp.Float(v) for v in X])
     Y_tuple = sp.Tuple(*[sp.Float(v) for v in Y])
     extrap_flag = sp.Integer(1 if extrapolate else 0)
-    return PiecewiseLinearInterp(x, X_tuple, Y_tuple, extrap_flag)
+    args = [x, X_tuple, Y_tuple, extrap_flag]
+    if name is not None:
+        args.append(Str(name))
+    return PiecewiseLinearInterp(*args)
 
 
-def piecewise_powerlaw(X, Y, x, extrapolate=False):
+def piecewise_powerlaw(X, Y, x, extrapolate=False, name=None):
     """
     Returns a symbolic expression describing a piecewise-powerlaw interpolant of data X and Y
 
@@ -114,5 +120,7 @@ def piecewise_powerlaw(X, Y, x, extrapolate=False):
         Symbol for the independent variable associated with X
     extrapolate: Boolean, optional
         Whether to use a powerlaw extrapolant past the limits, or simply limit to the outermost values
+    name: str, optional
+        Descriptive name for the interpolant, used in generated code identifiers
     """
-    return sp.exp(piecewise_linear(np.log(X), np.log(Y), sp.log(x), extrapolate))
+    return sp.exp(piecewise_linear(np.log(X), np.log(Y), sp.log(x), extrapolate, name=name))

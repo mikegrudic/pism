@@ -52,7 +52,7 @@ class Process:
             else:
                 setattr(sum_process, summed_attr, attr1 + attr2)
 
-        sum_process.name = f"{self.name} + {other.name}"
+        sum_process.name = f"{self.name} +\n{other.name}"
         return sum_process
 
     def __radd__(self, other):

@@ -365,6 +365,16 @@ class EquationSystem(dict):
                 elif str(g) == str(s) or f"x_{g}" == str(s):
                     rhs[s] = subsystem.rhs[g]
 
+        # Sort rhs to match solve_vars order for deterministic output.
+        # Map each rhs key (a Symbol) back to its position in solve_vars.
+        def _var_sort_key(sym):
+            name = str(sym)
+            for i, g in enumerate(solve_vars):
+                if name == g or name == f"x_{g}" or (name == "T" and g == "T"):
+                    return i
+            return len(solve_vars)
+        rhs = dict(sorted(rhs.items(), key=lambda kv: _var_sort_key(kv[0])))
+
         if return_jac:
             jac = {}
             for s, expr in rhs.items():
@@ -392,6 +402,8 @@ class EquationSystem(dict):
 
         from jaco.codegen.printers import (
             JacoCCodePrinter,
+            JacoCppCodePrinter,
+            JacoCudaCodePrinter,
             JacoFCodePrinter,
             JacoPythonCodePrinter,
             JacoJuliaCodePrinter,
@@ -401,8 +413,12 @@ class EquationSystem(dict):
             match language.lower():
                 case "fortran":
                     return JacoFCodePrinter()
-                case "c" | "c++":
+                case "c":
                     return JacoCCodePrinter()
+                case "c++":
+                    return JacoCppCodePrinter()
+                case "cuda":
+                    return JacoCudaCodePrinter()
                 case "python":
                     return JacoPythonCodePrinter()
                 case "julia":
@@ -451,8 +467,12 @@ class EquationSystem(dict):
 
         # Prepend table declarations and helper functions
         table_preamble = ""
-        if language.lower() in ("c", "c++"):
+        if language.lower() == "c":
             table_preamble = code_printer.get_table_declarations_c()
+        elif language.lower() == "c++":
+            table_preamble = code_printer.get_table_declarations_cpp()
+        elif language.lower() == "cuda":
+            table_preamble = code_printer.get_table_declarations_cuda()
         elif language.lower() == "fortran":
             table_preamble = code_printer.get_table_declarations_fortran()
         if table_preamble:
