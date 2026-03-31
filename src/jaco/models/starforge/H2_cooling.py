@@ -18,7 +18,7 @@ def lambda_H2_thin(collider):
     q = sp.Min(log_T - 3.0, 2.0)
     match collider:
         case "H":
-            return -103.0 + 97.59 * log_T - 48.05 * log_T**2 + 10.8 * log_T**3 - 0.9032 * log_T**4
+            return 10 ** (-103.0 + 97.59 * log_T - 48.05 * log_T**2 + 10.8 * log_T**3 - 0.9032 * log_T**4)
         # GA08 Eq 26, Galli & Palla 1998 - for H2-H collisions
         case "He":
             return 10 ** (
@@ -82,7 +82,9 @@ def H2_cooling_rate():
     Lambda_HD_thin = (
         (1.555e-25 + 1.272e-26 * pow(T, 0.77)) * sp.exp(-128.0 / T)
         + (2.406e-25 + 1.232e-26 * pow(T, 0.92)) * sp.exp(-255.0 / T)
-    ) * sp.exp(-T3 * T3 / 25.0)  # where does this last factor come from?
+    ) * sp.exp(
+        -T3 * T3 / 25.0
+    )  # where does this last factor come from?
 
     thin_cooling_total_perH2 = sum([lambda_H2_thin(c) * n_(c) for c in ("H", "H_2", "He", "e-", "H+")])
 
