@@ -6,7 +6,7 @@ from astropy.constants import k_B, m_p
 from astropy import units as u
 import numpy as np
 
-from jaco.interpolation import PiecewiseLinearInterp
+from jaco.interpolation import PiecewiseLinearInterp, TableInterp2D, TableInterp3D, register_table
 from sympy.core.symbol import Str
 
 T = sp.Symbol("T")  # temperature
@@ -134,3 +134,43 @@ def piecewise_powerlaw(X, Y, x, extrapolate=False, name=None):
         Descriptive name for the interpolant, used in generated code identifiers
     """
     return sp.exp(piecewise_linear(np.log(X), np.log(Y), sp.log(x), extrapolate, name=name))
+
+
+def table_interp_2d(name, data, axes, x, y, log_axes=None):
+    """Create a symbolic 2D table interpolation expression.
+
+    Parameters
+    ----------
+    name : str
+        Unique name for the table.
+    data : np.ndarray
+        2D array of shape (n_axis0, n_axis1).
+    axes : list of np.ndarray
+        [axis0_values, axis1_values], each uniformly spaced (linear or log).
+    x, y : sympy expressions
+        Interpolation variables corresponding to axis0 and axis1.
+    log_axes : list of bool, optional
+        Whether each axis is log-spaced.
+    """
+    register_table(name, data, axes, log_axes)
+    return TableInterp2D(x, y, Str(name))
+
+
+def table_interp_3d(name, data, axes, x, y, z, log_axes=None):
+    """Create a symbolic 3D table interpolation expression.
+
+    Parameters
+    ----------
+    name : str
+        Unique name for the table.
+    data : np.ndarray
+        3D array of shape (n_axis0, n_axis1, n_axis2).
+    axes : list of np.ndarray
+        [axis0_values, axis1_values, axis2_values].
+    x, y, z : sympy expressions
+        Interpolation variables corresponding to axis0, axis1, axis2.
+    log_axes : list of bool, optional
+        Whether each axis is log-spaced.
+    """
+    register_table(name, data, axes, log_axes)
+    return TableInterp3D(x, y, z, Str(name))
