@@ -37,8 +37,8 @@ int do_timestep(double *X, double *params) {
         //     printf("num_iter=%d X=%g %g dx=%g %g func=%g %g\n", num_iter, X[0], X[1], dx[0], dx[1], func[0],
         //     func[1]);
         if (num_iter > MAXITER) {
-            printf("jaco failed to converge for n=%g u=%g T=%g dx=%g %g func=%g %g", params[IDX_n_Htot],
-                   params[IDX_u_0], X[INDEX_T], dx[0], dx[1], func[0], func[1]);
+            printf("jaco failed to converge for n=%g u=%g T=%g dx=%g %g func=%g %g", params[INDEX_n_Htot],
+                   params[INDEX_u_0], X[INDEX_T], dx[0], dx[1], func[0], func[1]);
             endrun(10);
         }
     }
