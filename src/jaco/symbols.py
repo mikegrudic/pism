@@ -59,19 +59,29 @@ def BDF(species):
     return (n_(species) - sp.Symbol(str(n_(species)) + "_0")) / dt
 
 
+_SANITIZE_REPLACEMENTS = {"+": "plus", "-": "minus", ",": "_"}
+
+
+def sanitize_name(name):
+    """Sanitize a string to be a valid C/C++/Fortran identifier."""
+    for old, new in _SANITIZE_REPLACEMENTS.items():
+        name = name.replace(old, new)
+    return name
+
+
 def sanitize_symbols(expr):
     """
-    Given a symbolic expression, replace all symbols with + or - in them with plus or minus
-    to avoid ambiguity or syntax errors in code generation.
+    Given a symbolic expression, replace all symbols with characters invalid in
+    C/C++/Fortran identifiers to avoid syntax errors in code generation.
     """
     if hasattr(expr, "__iter__"):  # if iterable call recursively until we get down to actual expressions
         expr = [sanitize_symbols(e) for e in expr]
     else:
         for s in expr.free_symbols:
-            if "+" in str(s):
-                expr = expr.subs(s, sp.Symbol(str(s).replace("+", "plus")))
-            if "-" in str(s):
-                expr = expr.subs(s, sp.Symbol(str(s).replace("-", "minus")))
+            name = str(s)
+            new_name = sanitize_name(name)
+            if new_name != name:
+                expr = expr.subs(s, sp.Symbol(new_name))
     return expr
 
 

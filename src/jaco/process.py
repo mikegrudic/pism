@@ -125,6 +125,33 @@ class Process:
         """Returns the RHS of the system to solve and its Jacobian, applying simplifications"""
         return self.network.solver_functions(solve_vars, time_dependent, return_jac, return_dict)
 
-    def generate_code(self, solve_vars, time_dependent=[], language="c", jac=True, cse=True):
-        """Generates numerical code that implements the system RHS and/or Jacobian in the specified language."""
-        return self.network.generate_code(solve_vars, time_dependent, language, jac, cse)
+    def generate_code(self, solve_vars=[], time_dependent=[], language="c", jac=True, cse=True,
+                       minimal=True, func_name="microphysics_func_jac", jac_mode="symbolic"):
+        """Generates numerical code that implements the system RHS and/or Jacobian.
+
+        Parameters
+        ----------
+        solve_vars : list
+            Variables to solve for. If empty, solves for all species.
+        time_dependent : list
+            Variables that are time-dependent (get BDF discretization)
+        language : str
+            Target language: 'c', 'c++', 'cuda', 'fortran', 'python', 'julia'
+        jac : bool
+            Whether to include the Jacobian
+        cse : bool
+            Whether to apply common subexpression elimination
+        minimal : bool
+            If True, return a bare code string.
+            If False, return a dict with self-documenting code, headers, enums, etc.
+        func_name : str
+            Name of the generated function (only used when minimal=False)
+        jac_mode : str
+            'symbolic' or 'autodiff' (only used when minimal=False)
+        """
+        if not solve_vars:
+            solve_vars = list(self.network.rhs.keys())
+        return self.network.generate_code(
+            solve_vars, time_dependent, language, jac, cse,
+            minimal=minimal, func_name=func_name, jac_mode=jac_mode,
+        )
