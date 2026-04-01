@@ -88,7 +88,10 @@ typedef struct {
     int log0, log1, log2;
 } JacoTable3D;
 
-JACO_TABLE_FUNC double jaco_table3d_interp(double x0, double x1, double x2, const JacoTable3D* t) {
+// Trilinear interpolation with optional gradient computation.
+// Pass NULL for any grad pointer if that gradient is not needed.
+JACO_TABLE_FUNC double jaco_table3d_eval(double x0, double x1, double x2, const JacoTable3D* t,
+                                          double* grad_x0, double* grad_x1, double* grad_x2) {
     double v0 = t->log0 ? log(x0) : x0;
     double v1 = t->log1 ? log(x1) : x1;
     double v2 = t->log2 ? log(x2) : x2;
@@ -99,9 +102,12 @@ JACO_TABLE_FUNC double jaco_table3d_interp(double x0, double x1, double x2, cons
     double lo2 = t->log2 ? log(t->min2) : t->min2;
     double hi2 = t->log2 ? log(t->max2) : t->max2;
 
-    double fx = (v0 - lo0) / (hi0 - lo0) * (t->n0 - 1);
-    double fy = (v1 - lo1) / (hi1 - lo1) * (t->n1 - 1);
-    double fz = (v2 - lo2) / (hi2 - lo2) * (t->n2 - 1);
+    double dx = (hi0 - lo0) / (t->n0 - 1);
+    double dy = (hi1 - lo1) / (t->n1 - 1);
+    double dz = (hi2 - lo2) / (t->n2 - 1);
+    double fx = (v0 - lo0) / dx;
+    double fy = (v1 - lo1) / dy;
+    double fz = (v2 - lo2) / dz;
 
     if (fx < 0) fx = 0; if (fx > t->n0 - 1) fx = t->n0 - 1;
     if (fy < 0) fy = 0; if (fy > t->n1 - 1) fy = t->n1 - 1;
@@ -114,13 +120,54 @@ JACO_TABLE_FUNC double jaco_table3d_interp(double x0, double x1, double x2, cons
 
     int s1 = t->n2, s0 = t->n1 * t->n2;
     #define D(i,j,k) t->data[(ix+(i))*s0 + (iy+(j))*s1 + (iz+(k))]
-    double result =
+
+    double val =
         (1-tx)*(1-ty)*(1-tz)*D(0,0,0) + tx*(1-ty)*(1-tz)*D(1,0,0)
       + (1-tx)*ty*(1-tz)*D(0,1,0)     + tx*ty*(1-tz)*D(1,1,0)
       + (1-tx)*(1-ty)*tz*D(0,0,1)     + tx*(1-ty)*tz*D(1,0,1)
       + (1-tx)*ty*tz*D(0,1,1)         + tx*ty*tz*D(1,1,1);
+
+    if (grad_x0) {
+        double df_dtx =
+            -(1-ty)*(1-tz)*D(0,0,0) + (1-ty)*(1-tz)*D(1,0,0)
+          - ty*(1-tz)*D(0,1,0)      + ty*(1-tz)*D(1,1,0)
+          - (1-ty)*tz*D(0,0,1)      + (1-ty)*tz*D(1,0,1)
+          - ty*tz*D(0,1,1)          + ty*tz*D(1,1,1);
+        *grad_x0 = df_dtx / dx * (t->log0 ? 1.0 / x0 : 1.0);
+    }
+    if (grad_x1) {
+        double df_dty =
+            -(1-tx)*(1-tz)*D(0,0,0) - tx*(1-tz)*D(1,0,0)
+          + (1-tx)*(1-tz)*D(0,1,0)  + tx*(1-tz)*D(1,1,0)
+          - (1-tx)*tz*D(0,0,1)      - tx*tz*D(1,0,1)
+          + (1-tx)*tz*D(0,1,1)      + tx*tz*D(1,1,1);
+        *grad_x1 = df_dty / dy * (t->log1 ? 1.0 / x1 : 1.0);
+    }
+    if (grad_x2) {
+        double df_dtz =
+            -(1-tx)*(1-ty)*D(0,0,0) - tx*(1-ty)*D(1,0,0)
+          - (1-tx)*ty*D(0,1,0)      - tx*ty*D(1,1,0)
+          + (1-tx)*(1-ty)*D(0,0,1)  + tx*(1-ty)*D(1,0,1)
+          + (1-tx)*ty*D(0,1,1)      + tx*ty*D(1,1,1);
+        *grad_x2 = df_dtz / dz * (t->log2 ? 1.0 / x2 : 1.0);
+    }
+
     #undef D
-    return result;
+    return val;
+}
+
+// Convenience wrappers
+JACO_TABLE_FUNC double jaco_table3d_interp(double x0, double x1, double x2, const JacoTable3D* t) {
+    return jaco_table3d_eval(x0, x1, x2, t, NULL, NULL, NULL);
+}
+JACO_TABLE_FUNC double jaco_table3d_interp_dx(double x0, double x1, double x2, const JacoTable3D* t) {
+    double g; jaco_table3d_eval(x0, x1, x2, t, &g, NULL, NULL); return g;
+}
+JACO_TABLE_FUNC double jaco_table3d_interp_dy(double x0, double x1, double x2, const JacoTable3D* t) {
+    double g; jaco_table3d_eval(x0, x1, x2, t, NULL, &g, NULL); return g;
+}
+JACO_TABLE_FUNC double jaco_table3d_interp_dz(double x0, double x1, double x2, const JacoTable3D* t) {
+    double g; jaco_table3d_eval(x0, x1, x2, t, NULL, NULL, &g); return g;
 }
 
 // --- HDF5 Loaders ---
