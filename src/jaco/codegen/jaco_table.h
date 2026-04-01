@@ -24,94 +24,57 @@ typedef struct {
     int log0, log1;    // 1 if axis is log-spaced
 } JacoTable2D;
 
+// Bilinear interpolation with optional gradient computation.
+// Pass NULL for grad_x0/grad_x1 if gradients are not needed.
+JACO_TABLE_FUNC double jaco_table2d_eval(double x0, double x1, const JacoTable2D* t,
+                                          double* grad_x0, double* grad_x1) {
+    double v0 = t->log0 ? log(x0) : x0;
+    double v1 = t->log1 ? log(x1) : x1;
+    double lo0 = t->log0 ? log(t->min0) : t->min0;
+    double hi0 = t->log0 ? log(t->max0) : t->max0;
+    double lo1 = t->log1 ? log(t->min1) : t->min1;
+    double hi1 = t->log1 ? log(t->max1) : t->max1;
+
+    double dx = (hi0 - lo0) / (t->n0 - 1);
+    double dy = (hi1 - lo1) / (t->n1 - 1);
+    double fx = (v0 - lo0) / dx;
+    double fy = (v1 - lo1) / dy;
+
+    if (fx < 0) fx = 0; if (fx > t->n0 - 1) fx = t->n0 - 1;
+    if (fy < 0) fy = 0; if (fy > t->n1 - 1) fy = t->n1 - 1;
+
+    int ix = (int)fx; if (ix >= t->n0 - 1) ix = t->n0 - 2;
+    int iy = (int)fy; if (iy >= t->n1 - 1) iy = t->n1 - 2;
+    double tx = fx - ix;
+    double ty = fy - iy;
+
+    double f00 = t->data[ix * t->n1 + iy];
+    double f10 = t->data[(ix + 1) * t->n1 + iy];
+    double f01 = t->data[ix * t->n1 + (iy + 1)];
+    double f11 = t->data[(ix + 1) * t->n1 + (iy + 1)];
+
+    double val = (1-tx)*(1-ty)*f00 + tx*(1-ty)*f10 + (1-tx)*ty*f01 + tx*ty*f11;
+
+    if (grad_x0) {
+        double df_dtx = -(1-ty)*f00 + (1-ty)*f10 - ty*f01 + ty*f11;
+        *grad_x0 = df_dtx / dx * (t->log0 ? 1.0 / x0 : 1.0);
+    }
+    if (grad_x1) {
+        double df_dty = -(1-tx)*f00 - tx*f10 + (1-tx)*f01 + tx*f11;
+        *grad_x1 = df_dty / dy * (t->log1 ? 1.0 / x1 : 1.0);
+    }
+    return val;
+}
+
+// Convenience wrappers
 JACO_TABLE_FUNC double jaco_table2d_interp(double x0, double x1, const JacoTable2D* t) {
-    // Map to normalized coordinates [0, n-1]
-    double v0 = t->log0 ? log(x0) : x0;
-    double v1 = t->log1 ? log(x1) : x1;
-    double lo0 = t->log0 ? log(t->min0) : t->min0;
-    double hi0 = t->log0 ? log(t->max0) : t->max0;
-    double lo1 = t->log1 ? log(t->min1) : t->min1;
-    double hi1 = t->log1 ? log(t->max1) : t->max1;
-
-    double fx = (v0 - lo0) / (hi0 - lo0) * (t->n0 - 1);
-    double fy = (v1 - lo1) / (hi1 - lo1) * (t->n1 - 1);
-
-    // Clamp
-    if (fx < 0) fx = 0; if (fx > t->n0 - 1) fx = t->n0 - 1;
-    if (fy < 0) fy = 0; if (fy > t->n1 - 1) fy = t->n1 - 1;
-
-    int ix = (int)fx; if (ix >= t->n0 - 1) ix = t->n0 - 2;
-    int iy = (int)fy; if (iy >= t->n1 - 1) iy = t->n1 - 2;
-    double tx = fx - ix;
-    double ty = fy - iy;
-
-    // Bilinear interpolation
-    double f00 = t->data[ix * t->n1 + iy];
-    double f10 = t->data[(ix + 1) * t->n1 + iy];
-    double f01 = t->data[ix * t->n1 + (iy + 1)];
-    double f11 = t->data[(ix + 1) * t->n1 + (iy + 1)];
-
-    return (1 - tx) * (1 - ty) * f00 + tx * (1 - ty) * f10
-         + (1 - tx) * ty * f01 + tx * ty * f11;
+    return jaco_table2d_eval(x0, x1, t, NULL, NULL);
 }
-
-// Partial derivatives of bilinear interpolation (for symbolic Jacobian path)
 JACO_TABLE_FUNC double jaco_table2d_interp_dx(double x0, double x1, const JacoTable2D* t) {
-    double v0 = t->log0 ? log(x0) : x0;
-    double v1 = t->log1 ? log(x1) : x1;
-    double lo0 = t->log0 ? log(t->min0) : t->min0;
-    double hi0 = t->log0 ? log(t->max0) : t->max0;
-    double lo1 = t->log1 ? log(t->min1) : t->min1;
-    double hi1 = t->log1 ? log(t->max1) : t->max1;
-
-    double dx = (hi0 - lo0) / (t->n0 - 1);
-    double dy = (hi1 - lo1) / (t->n1 - 1);
-    double fx = (v0 - lo0) / dx;
-    double fy = (v1 - lo1) / dy;
-    if (fx < 0) fx = 0; if (fx > t->n0 - 1) fx = t->n0 - 1;
-    if (fy < 0) fy = 0; if (fy > t->n1 - 1) fy = t->n1 - 1;
-
-    int ix = (int)fx; if (ix >= t->n0 - 1) ix = t->n0 - 2;
-    int iy = (int)fy; if (iy >= t->n1 - 1) iy = t->n1 - 2;
-    double ty = fy - iy;
-
-    double f00 = t->data[ix * t->n1 + iy];
-    double f10 = t->data[(ix + 1) * t->n1 + iy];
-    double f01 = t->data[ix * t->n1 + (iy + 1)];
-    double f11 = t->data[(ix + 1) * t->n1 + (iy + 1)];
-
-    double df_dtx = -(1-ty)*f00 + (1-ty)*f10 - ty*f01 + ty*f11;
-    double dv0_dx0 = t->log0 ? 1.0 / x0 : 1.0;
-    return df_dtx / dx * dv0_dx0;
+    double g; jaco_table2d_eval(x0, x1, t, &g, NULL); return g;
 }
-
 JACO_TABLE_FUNC double jaco_table2d_interp_dy(double x0, double x1, const JacoTable2D* t) {
-    double v0 = t->log0 ? log(x0) : x0;
-    double v1 = t->log1 ? log(x1) : x1;
-    double lo0 = t->log0 ? log(t->min0) : t->min0;
-    double hi0 = t->log0 ? log(t->max0) : t->max0;
-    double lo1 = t->log1 ? log(t->min1) : t->min1;
-    double hi1 = t->log1 ? log(t->max1) : t->max1;
-
-    double dx = (hi0 - lo0) / (t->n0 - 1);
-    double dy = (hi1 - lo1) / (t->n1 - 1);
-    double fx = (v0 - lo0) / dx;
-    double fy = (v1 - lo1) / dy;
-    if (fx < 0) fx = 0; if (fx > t->n0 - 1) fx = t->n0 - 1;
-    if (fy < 0) fy = 0; if (fy > t->n1 - 1) fy = t->n1 - 1;
-
-    int ix = (int)fx; if (ix >= t->n0 - 1) ix = t->n0 - 2;
-    int iy = (int)fy; if (iy >= t->n1 - 1) iy = t->n1 - 2;
-    double tx = fx - ix;
-
-    double f00 = t->data[ix * t->n1 + iy];
-    double f10 = t->data[(ix + 1) * t->n1 + iy];
-    double f01 = t->data[ix * t->n1 + (iy + 1)];
-    double f11 = t->data[(ix + 1) * t->n1 + (iy + 1)];
-
-    double df_dty = -(1-tx)*f00 - tx*f10 + (1-tx)*f01 + tx*f11;
-    double dv1_dx1 = t->log1 ? 1.0 / x1 : 1.0;
-    return df_dty / dy * dv1_dx1;
+    double g; jaco_table2d_eval(x0, x1, t, NULL, &g); return g;
 }
 
 // --- 3D Table ---
