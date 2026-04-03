@@ -24,6 +24,9 @@ void jaco_do_cooling(int i) {
     if (dtime == 0) {
         return;
     }
+    // allocate X and params
+
+    // "GIZMO-to-JACO" step
     double Δt = dtime * UNIT_TIME_IN_CGS;
     set_PdV_work_heatingrate(i, dtime);
     double u_0 = SphP[i].InternalEnergy * UNIT_SPECEGY_IN_CGS, T = SphP[i].InternalEnergy * U_TO_TEMP_UNITS, u = u_0,
@@ -32,8 +35,12 @@ void jaco_do_cooling(int i) {
         pdv_work = SphP[i].DtInternalEnergy * n_Htot;
     }
 
-#include "assignments.h" // assign initial values of X and params
+// assign initial values of X and params
+    // end GIZMO-to_JACO layer
+    // solve
     int num_iter = jaco_solve(X, params, 1e-6);
+
+    // JACO-to-GIZMO layer
     SphP[i].InternalEnergy = X[INDEX_u] / UNIT_SPECEGY_IN_CGS;
     double temp = X[INDEX_T];
 }
