@@ -11,6 +11,7 @@ from .gas_dust_collisions import gas_dust_collisions
 from .cosmic_ray_ionization import cosmic_ray_ionization, cosmic_ray_photoionization
 from .photoelectric_heating import photoelectric_heating
 from .grain_assisted_recombination import grain_assisted_recombination
+from .metal_line_cooling import metal_line_cooling
 from jaco.processes import inv_compton_cooling
 # import h2_chemistry
 
@@ -30,6 +31,7 @@ def make_model():
         photoelectric_heating,
         inv_compton_cooling,
         grain_assisted_recombination("C+"),
+        metal_line_cooling(z=0.0),
     ]
 
     model = sum(processes)

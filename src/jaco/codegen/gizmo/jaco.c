@@ -46,7 +46,7 @@ void jaco_do_cooling(int i) {
 }
 
 void jaco_set_eos_pressure(int i) {
-    SphP[i].Pressure = (GAMMA(i) - 1) * SphP[i].InternalEnergyPred * Get_Gas_density_for_energy_i(i);
+    SphP[i].Pressure = (GAMMA(i) - 1) * SphP[i].InternalEnergyPred * Get_Gas_density_for_energy_i(i); // todo: must codegen this 
 }
 
 int iter_condition(double *X, double *dx, double tol) {

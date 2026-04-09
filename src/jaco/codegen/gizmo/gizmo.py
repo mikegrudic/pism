@@ -4,9 +4,15 @@ from jaco.models import starforge
 import sympy as sp
 
 
-def generate_funcjac_code(system, solve_vars=None, time_dependent=None,
-                          cse=True, language="c", jac_mode="symbolic",
-                          func_name="microphysics_func_jac"):
+def generate_funcjac_code(
+    system,
+    solve_vars=None,
+    time_dependent=None,
+    cse=True,
+    language="c",
+    jac_mode="symbolic",
+    func_name="microphysics_func_jac",
+):
     """Generates self-documenting source files for the RHS + Jacobian function.
 
     Parameters
@@ -34,8 +40,14 @@ def generate_funcjac_code(system, solve_vars=None, time_dependent=None,
     system.heat += sp.Symbol("pdv_work")
 
     result = system.generate_code(
-        solve_vars, time_dependent, language=language, jac=True, cse=cse,
-        minimal=False, func_name=func_name, jac_mode=jac_mode,
+        solve_vars,
+        time_dependent,
+        language=language,
+        jac=True,
+        cse=cse,
+        minimal=False,
+        func_name=func_name,
+        jac_mode=jac_mode,
     )
 
     lang = language.lower()
@@ -64,5 +76,5 @@ if __name__ == "__main__":
 
     lang = sys.argv[1] if len(sys.argv) > 1 else "c"
     jac = sys.argv[2] if len(sys.argv) > 2 else "symbolic"
-    solve = ["u", "T", "H+", "He+", "He++"]
+    solve = ["u", "T"]  # , "H+", "He+", "He++"]
     generate_funcjac_code(starforge, solve_vars=solve, language=lang, jac_mode=jac)

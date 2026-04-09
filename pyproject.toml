@@ -25,3 +25,7 @@ license-files = ["LICEN[CS]E*"]
 [project.urls]
 Homepage = "https://github.com/mikegrudic/jaco"
 Issues = "https://github.com/mikegrudic/jaco/issues"
+
+[tool.setuptools.package-data]
+"jaco.models.starforge" = ["spcool_tables.hdf5"]
+"jaco.codegen" = ["*.h"]
