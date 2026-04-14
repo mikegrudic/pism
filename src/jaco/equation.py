@@ -7,6 +7,12 @@ class Equation(sp.core.relational.Equality):
     """Sympy equation where we overload addition/subtraction to apply those operations to the RHS, for summing rate
     equations"""
 
+    def __new__(cls, lhs, rhs, **kwargs):
+        # Force evaluate=False so trivial equalities like Eq(0, 0) don't
+        # collapse into a BooleanTrue and lose their lhs/rhs structure.
+        kwargs.setdefault("evaluate", False)
+        return super().__new__(cls, lhs, rhs, **kwargs)
+
     def get_summand(self, other):
         """Value-check the operand and return the quantity to be summed in the operation: the expression itself if an expression, or the RHS"""
         if isinstance(other, sp.core.relational.Equality):

@@ -1,5 +1,6 @@
 """Custom sympy code printers that emit efficient helper-function calls for piecewise interpolation."""
 
+import sympy as sp
 from sympy.printing.c import C99CodePrinter
 from sympy.printing.fortran import FCodePrinter
 from sympy.printing.pycode import PythonCodePrinter
@@ -144,6 +145,38 @@ class _InterpPrinterMixin:
         super().__init__(*args, **kwargs)
         self._interp_tables = {}  # maps (tuple_id) -> (var_name, values)
         self._needs_interp_helpers = False
+
+    def _print_Heaviside(self, expr):
+        """Print Heaviside step function as a branchless comparison.
+
+        Sympy's default ccode emits a 3-way ternary because H(0) = 1/2 is
+        the default value. At floating point, x == 0.0 is a measure-zero
+        event that never occurs in physical computation, so we drop the
+        H(0) case and emit just (x > 0). The compiler turns this into a
+        branchless cmov/csel.
+        """
+        arg = self._print(expr.args[0])
+        return f"(double)({arg} > 0)"
+
+    def _print_Piecewise(self, expr):
+        """Print Piecewise as a single-line ternary expression.
+
+        Compilers reliably turn `cond ? a : b` (where a and b are scalar
+        floating-point values) into a branchless cmov/csel, so the only
+        real cost is the multi-line formatting that sympy emits by default.
+        We collapse it to a single line for readability and to make sure
+        the compiler sees it as an expression, not a statement.
+        """
+        # Validate the last condition is True (sentinel)
+        if expr.args[-1].cond is not sp.true:
+            return super()._print_Piecewise(expr)
+
+        result = self._print(expr.args[-1].expr)
+        for e, c in reversed(expr.args[:-1]):
+            cond = self._print(c)
+            val = self._print(e)
+            result = f"({cond} ? {val} : {result})"
+        return result
 
     def _print_Float(self, expr):
         """Print floats using the shortest clean representation.

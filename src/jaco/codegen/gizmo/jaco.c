@@ -1,125 +1,194 @@
+/*
+ * jaco.c — Implicit backward-Euler microphysics solver for GIZMO.
+ *
+ * This file is a static template distributed with the jaco codegen package.
+ * It provides the Newton-Raphson solver loop and the GIZMO integration layer.
+ * The physics (RHS + Jacobian) is supplied by the codegen-produced
+ * microphysics_func_jac(), which is called as a black box.
+ *
+ * The solver uses SolveVars and Params unions (defined in microphysics_func_jac.h)
+ * that provide both named field access (sv->T, pr->n_Htot) and indexed array
+ * access (sv->data[i]) via anonymous structs. This eliminates index-mismatch
+ * bugs while allowing generic loops over variables.
+ *
+ * Recovery strategy on convergence failure:
+ *   1. Full Newton steps (careful_steps=1). Fast when it works.
+ *   2. Damped Newton with 30-step ramp (careful_steps=30). Prevents overshoot.
+ *   3. Bisection restart (careful_steps=31). Resets to geometric mean of
+ *      temperature bounds, then damped Newton again.
+ *   4. If all attempts exhaust MAXITER, accept the state if the residual is
+ *      small (relaxed tolerance), otherwise abort.
+ */
+
 #include "../allvars.h"
 #include "../proto.h"
-#include "indices.h"
-#include "math.h"
 #include "microphysics_func_jac.h"
-#include "string.h"
+#include <math.h>
 #include <string.h>
 
 #ifdef JACO
 
-void call_jaco(int i) {
-    jaco_do_cooling(i);
+/* ---- GIZMO interface layer ---- */
+
+void gizmo_to_jaco(int i, SolveVars *sv, Params *pr) {
+    /* Pack GIZMO particle data into solver structs.
+       All solver quantities are in CGS; the conversion from code units happens here. */
+    double dtime = GET_PARTICLE_TIMESTEP_IN_PHYSICAL(i);
+    double Δt = dtime * UNIT_TIME_IN_CGS;
+    set_PdV_work_heatingrate(i, dtime);
+    double n_Htot = nH_CGS(i);
+    sv->u = SphP[i].InternalEnergy * UNIT_SPECEGY_IN_CGS;
+    sv->T = SphP[i].InternalEnergy * U_TO_TEMP_UNITS;
+    pr->u_0 = sv->u;
+    pr->n_Htot = n_Htot;
+    pr->x_H = 1.;
+    pr->Δt = Δt;
+    pr->pdv_work = (SphP[i].CoolingIsOperatorSplitThisTimestep == 0) ? SphP[i].DtInternalEnergy * n_Htot : 0;
+}
+
+void jaco_to_gizmo(int i, const SolveVars *sv, const Params *pr) {
+    /* Unpack solver result back into GIZMO particle data.
+       Updates internal energy, predicted energy, pressure, and zeros
+       DtInternalEnergy if the cooling is not operator-split.
+       jaco_eos_pressure is codegen'd from the model's species composition. */
+    SphP[i].InternalEnergy = sv->u / UNIT_SPECEGY_IN_CGS;
     SphP[i].InternalEnergyPred = SphP[i].InternalEnergy;
-    jaco_set_eos_pressure(i);
+    SphP[i].Pressure = jaco_eos_pressure(sv, pr) / UNIT_PRESSURE_IN_CGS;
 #ifndef COOLING_OPERATOR_SPLIT
     if (SphP[i].CoolingIsOperatorSplitThisTimestep == 0) {
         SphP[i].DtInternalEnergy = 0;
-    } // if unsplit, zero the internal energy change here
+    }
 #endif
 }
 
-void jaco_do_cooling(int i) {
-    double dtime = GET_PARTICLE_TIMESTEP_IN_PHYSICAL(i);
-    if (dtime == 0) {
+void call_jaco(int i) {
+    /* Top-level entry point called by GIZMO's cooling routine for each particle. */
+    if (GET_PARTICLE_TIMESTEP_IN_PHYSICAL(i) == 0) {
         return;
     }
-    // allocate X and params
+    SolveVars sv;
+    Params pr;
+    gizmo_to_jaco(i, &sv, &pr);
+    jaco_solve(&sv, &pr, 1e-6);
+    jaco_to_gizmo(i, &sv, &pr);
+}
 
-    // "GIZMO-to-JACO" step
-    double Δt = dtime * UNIT_TIME_IN_CGS;
-    set_PdV_work_heatingrate(i, dtime);
-    double u_0 = SphP[i].InternalEnergy * UNIT_SPECEGY_IN_CGS, T = SphP[i].InternalEnergy * U_TO_TEMP_UNITS, u = u_0,
-           n_Htot = nH_CGS(i), x_H = 1., pdv_work = 0;
-    if (SphP[i].CoolingIsOperatorSplitThisTimestep == 0) {
-        pdv_work = SphP[i].DtInternalEnergy * n_Htot;
+/* ---- Newton-Raphson solver ---- */
+
+int iter_condition(const SolveVars *sv, const SolveVars *dsv, double tol) {
+    /* Returns nonzero if any solved variable changed by more than tol * |value|
+       on the last iteration (i.e. not yet converged). */
+    for (int i = 0; i < N_VARS; i++) {
+        if (fabs(dsv->data[i]) > tol * fabs(sv->data[i])) return 1;
     }
-
-// assign initial values of X and params
-    // end GIZMO-to_JACO layer
-    // solve
-    int num_iter = jaco_solve(X, params, 1e-6);
-
-    // JACO-to-GIZMO layer
-    SphP[i].InternalEnergy = X[INDEX_u] / UNIT_SPECEGY_IN_CGS;
-    double temp = X[INDEX_T];
+    return 0;
 }
 
-void jaco_set_eos_pressure(int i) {
-    SphP[i].Pressure = (GAMMA(i) - 1) * SphP[i].InternalEnergyPred * Get_Gas_density_for_energy_i(i); // todo: must codegen this 
-}
-
-int iter_condition(double *X, double *dx, double tol) {
-    int cond = 0;
-    for (int i = 0; i < NUM_VARS; i++) {
-        cond += (fabs(dx[i]) > tol * fabs(X[i]));
-    }
-    return cond;
-}
-
-int solve_failure_condition(double *X, double *dx, double tol, int num_iter) {
+int solve_failure_condition(const SolveVars *sv, const SolveVars *dsv, double tol, int num_iter) {
+    /* Returns nonzero if the solver should give up on the current attempt:
+       exceeded MAXITER, variable out of physical bounds, or NaN detected. */
     int failure = 0;
     failure |= num_iter >= MAXITER;
-    failure |= X[INDEX_T] > 1e11;
-    failure |= X[INDEX_u] > 1e18;
-    for (int i; i < 0; i++) {
-        failure |= isnan(dx[i]);
-        failure |= isnan(X[i]);
+    failure |= sv->T > 1e11;
+    failure |= sv->u > 1e18;
+    for (int i = 0; i < N_VARS; i++) {
+        failure |= isnan(dsv->data[i]);
+        failure |= isnan(sv->data[i]);
     }
     return failure;
 }
 
-int jaco_solve(double *X, double *params, double tol) {
-    double funcjac[NUM_VARS * (NUM_VARS + 1)], func[NUM_VARS], jac[NUM_VARS * NUM_VARS], jacinv[NUM_VARS * NUM_VARS],
-        dx[NUM_VARS] = {MAX_REAL_NUMBER, MAX_REAL_NUMBER}, X0[NUM_VARS], T_upper = MAX_REAL_NUMBER,
-        T_lower = MIN_REAL_NUMBER;
+int jaco_solve(SolveVars *sv, const Params *pr, double tol) {
+    /* Newton-Raphson solver for the backward-Euler microphysics step.
+     *
+     * Solves F(X) = 0 where F is the residual from microphysics_func_jac():
+     *   F_T: energy equation (heating - cooling - implicit time derivative)
+     *   F_u: equation of state (u = k_B*T / (mu*m_H))
+     *
+     * The Newton step is dx = -J^{-1} F, applied with optional damping (fac < 1)
+     * and floor clamping (MinGasTemp, MinEgySpec).
+     *
+     * T_upper/T_lower track bounds on the root from the sign of F_T, used for
+     * bisection recovery when Newton oscillates.
+     */
+    SolveVars func, dsv;
+    const SolveVars sv0 = *sv;
+    for (int i = 0; i < N_VARS; i++) dsv.data[i] = MAX_REAL_NUMBER;
+    double jac[N_VARS][N_VARS], jacinv[N_VARS * N_VARS];
+    double T_upper = MAX_REAL_NUMBER, T_lower = MIN_REAL_NUMBER;
 
-    memcpy(X0, X, NUM_VARS * sizeof(double));
     int num_iter = 0;
     int careful_steps = 1;
-    while (iter_condition(X, dx, tol)) {
-        microphysics_func_jac(X, params, funcjac);
-        memcpy(func, funcjac, NUM_VARS * sizeof(double));
-        memcpy(jac, funcjac + NUM_VARS, NUM_VARS * NUM_VARS * sizeof(double));
-        if (func[INDEX_T] < 0) {
-            T_upper = fmin(T_upper, X[INDEX_T]);
-        } else { // TODO: check that func[INDEX_T] is always the heat equation!
-            T_lower = fmax(T_lower, X[INDEX_T]);
+    while (iter_condition(sv, &dsv, tol)) {
+        microphysics_func_jac(sv, pr, &func, jac);
+
+        /* Track temperature bounds from sign of energy equation residual */
+        if (func.T < 0) {
+            T_upper = fmin(T_upper, sv->T);
+        } else {
+            T_lower = fmax(T_lower, sv->T);
         }
-        double det = jac[0] * jac[3] - jac[1] * jac[2];
-        jacinv[0] = jac[3] / det;
-        jacinv[3] = jac[0] / det;
-        jacinv[1] = -jac[1] / det;
-        jacinv[2] = -jac[2] / det;
-        dx[0] = -(jacinv[0] * func[0] + jacinv[1] * func[1]);
-        dx[1] = -(jacinv[2] * func[0] + jacinv[3] * func[1]);
-        if ((X[INDEX_T] == All.MinGasTemp) && (dx[INDEX_T] < 0) && (dx[INDEX_u] < 0)) {
+
+        /* 2x2 matrix inverse — hardcoded for the current 2-variable system.
+           TODO: generalize for N_VARS > 2 in the codegen. */
+        double det = jac[0][0] * jac[1][1] - jac[0][1] * jac[1][0];
+        jacinv[0] = jac[1][1] / det;
+        jacinv[3] = jac[0][0] / det;
+        jacinv[1] = -jac[0][1] / det;
+        jacinv[2] = -jac[1][0] / det;
+        for (int i = 0; i < N_VARS; i++) {
+            dsv.data[i] = 0;
+            for (int j = 0; j < N_VARS; j++) {
+                dsv.data[i] -= jacinv[i * N_VARS + j] * func.data[j];
+            }
+        }
+
+        /* At the temperature floor with a negative step, we can't go lower — done */
+        if ((sv->T <= All.MinGasTemp) && (dsv.T < 0)) {
             break;
         }
+
+        /* Apply damped Newton step with floor clamping.
+           fac ramps from 1/careful_steps to 1 over the first careful_steps iterations,
+           preventing large overshoot in stiff regimes. */
         const double fac = fmin(1, ((float)num_iter + 1) / careful_steps);
-        X[INDEX_T] = fmax(All.MinGasTemp, fac * dx[INDEX_T] + X[INDEX_T]);
-        X[INDEX_u] = fmax(All.MinEgySpec, fac * dx[INDEX_u] + X[INDEX_u]);
+        sv->T = fmax(All.MinGasTemp, fac * dsv.T + sv->T);
+        sv->u = fmax(All.MinEgySpec * UNIT_SPECEGY_IN_CGS, fac * dsv.u + sv->u);
         num_iter++;
-        if (solve_failure_condition(X, dx, tol, num_iter)) {
-            if (careful_steps == 1) { // if we failed after trying an aggressive solve, start over more carefully
+
+        if (solve_failure_condition(sv, &dsv, tol, num_iter)) {
+            if (careful_steps == 1) {
+                /* Attempt 1 failed: retry with 30-step damped ramp */
                 careful_steps = 30;
-                for (int i = 0; i < NUM_VARS; i++) {
-                    X[i] = X0[i];
-                    dx[i] = MAX_REAL_NUMBER;
-                }
+                *sv = sv0;
+                for (int i = 0; i < N_VARS; i++) dsv.data[i] = MAX_REAL_NUMBER;
                 num_iter = 0;
-                continue;                     // try again
-            } else if (careful_steps == 30) { // perhaps we're getting stuck in the trough of the cooling curve
-                X[INDEX_T] = sqrt(T_upper * T_lower);
-                X[INDEX_u] = X[INDEX_T] / U_TO_TEMP_UNITS;
-                dx[0] = dx[1] = MAX_REAL_NUMBER;
+                continue;
+            } else if (careful_steps == 30) {
+                /* Attempt 2 failed: bisection restart from geometric mean of T bounds */
+                careful_steps = 31;
+                sv->T = sqrt(T_upper * T_lower);
+                sv->u = sv->T / U_TO_TEMP_UNITS;
+                for (int i = 0; i < N_VARS; i++) dsv.data[i] = MAX_REAL_NUMBER;
                 num_iter = 0;
-                continue; // try again
+                continue;
             } else {
+                /* Attempt 3 failed: check if residual is small enough to accept.
+                   Near the temperature floor the Jacobian becomes ill-conditioned,
+                   producing huge dx even when the residual is effectively zero.
+                   We use a relaxed tolerance (100x nominal) and warn. */
+                double scale_T = fabs(pr->u_0 * pr->n_Htot / pr->Δt) + 1e-30;
+                double scale_u = fabs(sv->u) + 1e-30;
+                double relaxed_tol = 100 * tol;
+                if ((fabs(func.T) < relaxed_tol * scale_T) && (fabs(func.u) < relaxed_tol * scale_u)) {
+                    printf("WARNING: jaco accepting relaxed tolerance (%.0e vs nominal %.0e): n=%g T=%g u=%g resid_T=%g resid_u=%g\n",
+                           relaxed_tol, tol, pr->n_Htot, sv->T, sv->u, fabs(func.T)/scale_T, fabs(func.u)/scale_u);
+                    break;
+                }
                 printf("jaco failed to converge for num_iter=%d n=%g u0=%g u=%g T=%g X0=%g %g X=%g %g dx=%g %g func=%g "
                        "%g careful_steps=%d",
-                       num_iter, params[INDEX_n_Htot], params[INDEX_u_0], X[INDEX_u], X[INDEX_T], X0[0], X0[1], X[0],
-                       X[1], dx[0], dx[1], func[0], func[1], careful_steps);
+                       num_iter, pr->n_Htot, pr->u_0, sv->u, sv->T, sv0.T, sv0.u, sv->T, sv->u, dsv.T, dsv.u, func.T,
+                       func.u, careful_steps);
                 endrun(10);
             }
         }

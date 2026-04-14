@@ -125,9 +125,16 @@ class Process:
         """Returns the RHS of the system to solve and its Jacobian, applying simplifications"""
         return self.network.solver_functions(solve_vars, time_dependent, return_jac, return_dict)
 
-    def generate_code(self, solve_vars=[], time_dependent=[], language="c", jac=True, cse=True,
-                       minimal=True, func_name="microphysics_func_jac", jac_mode="symbolic"):
-        """Generates numerical code that implements the system RHS and/or Jacobian.
+    def generate_code(self, solve_vars=[], time_dependent=[], language="c", cse=True,
+                       func_name="microphysics_func_jac", jac_mode="symbolic"):
+        """Generates source files for the RHS + Jacobian function and writes them
+        to the current directory.
+
+        For C, produces:
+          - microphysics_func_jac.c  — RHS + Jacobian function
+          - microphysics_func_jac.h  — union types, enums, declaration
+          - jaco_interp.h            — interpolation helpers + static table data
+          - jaco_eos.c               — EOS pressure function
 
         Parameters
         ----------
@@ -136,22 +143,18 @@ class Process:
         time_dependent : list
             Variables that are time-dependent (get BDF discretization)
         language : str
-            Target language: 'c', 'c++', 'cuda', 'fortran', 'python', 'julia'
-        jac : bool
-            Whether to include the Jacobian
+            Target language: 'c', 'c++', 'cuda', 'python', 'julia'
         cse : bool
             Whether to apply common subexpression elimination
-        minimal : bool
-            If True, return a bare code string.
-            If False, return a dict with self-documenting code, headers, enums, etc.
         func_name : str
-            Name of the generated function (only used when minimal=False)
+            Name of the generated function.
         jac_mode : str
-            'symbolic' or 'autodiff' (only used when minimal=False)
+            'symbolic' or 'autodiff'
         """
-        if not solve_vars:
-            solve_vars = list(self.network.rhs.keys())
-        return self.network.generate_code(
-            solve_vars, time_dependent, language, jac, cse,
-            minimal=minimal, func_name=func_name, jac_mode=jac_mode,
+        from .codegen.gizmo.gizmo import generate_funcjac_code
+        generate_funcjac_code(
+            self, solve_vars=solve_vars or None,
+            time_dependent=time_dependent or None,
+            cse=cse, language=language, jac_mode=jac_mode,
+            func_name=func_name,
         )

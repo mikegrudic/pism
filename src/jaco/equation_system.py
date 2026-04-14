@@ -132,7 +132,9 @@ class EquationSystem(dict):
 
             xtot = total_atom_abundance(i)
             self.substitutions.append((x_(i), xtot - x_total))
-            del self[i]
+            # Some species (e.g. metals appearing only in heat terms) are
+            # detected by chemical_species but have no evolution equation.
+            self.pop(i, None)
 
         for expr, sub in self.substitutions:
             self.subs(expr, sub)
@@ -530,6 +532,9 @@ class EquationSystem(dict):
         result["n_params"] = len(param_syms)
         result["language"] = language
 
+        if lang == "c":
+            result["eos_code"] = self._gen_eos(var_names, printer)
+
         return result
 
     def _gen_symbolic_code(self, func_mat, jac_mat, var_names, param_syms, printer, cse, lang, func_name):
@@ -555,6 +560,8 @@ class EquationSystem(dict):
         for var in var_names:
             if is_scripting:
                 lines.append(f"{ind}{var} = X[IDX_{var}]")
+            elif lang == "c":
+                lines.append(f"{ind}const double {var} = vars->{var};")
             else:
                 lines.append(f"{ind}const double {var} = X[IDX_{var}];")
 
@@ -562,6 +569,8 @@ class EquationSystem(dict):
         for p in param_syms:
             if is_scripting:
                 lines.append(f"{ind}{p} = params[PARAM_{p}]")
+            elif lang == "c":
+                lines.append(f"{ind}const double {p} = params->{p};")
             else:
                 lines.append(f"{ind}const double {p} = params[PARAM_{p}];")
         lines.append("")
@@ -574,7 +583,10 @@ class EquationSystem(dict):
         lines.append("")
 
         for i, var in enumerate(var_names):
-            lines.append(f"{ind}rhs[IDX_{var}] = {printer.doprint(func_cse[i])}{semi}")
+            if lang == "c":
+                lines.append(f"{ind}rhs->{var} = {printer.doprint(func_cse[i])}{semi}")
+            else:
+                lines.append(f"{ind}rhs[IDX_{var}] = {printer.doprint(func_cse[i])}{semi}")
         lines.append("")
 
         for i, vi in enumerate(var_names):
@@ -669,13 +681,15 @@ function {func_name}(X, params, rhs, jac)
 end
 """
         else:
-            c_sig = f"void {func_name}(const double* X, const double* params, double* rhs, double jac[N_VARS][N_VARS])"
-            if lang == "cuda":
-                return f'#include <math.h>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n\n__device__ {c_sig} {{\n{body}\n}}\n'
-            elif lang == "c":
+            if lang == "c":
+                c_sig = f"void {func_name}(const SolveVars *vars, const Params *params, SolveVars *rhs, double jac[N_VARS][N_VARS])"
                 return f'#include <math.h>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n\n{c_sig} {{\n{body}\n}}\n'
             else:
-                return f'#include <cmath>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n\n{c_sig} {{\n{body}\n}}\n'
+                c_sig = f"void {func_name}(const double* X, const double* params, double* rhs, double jac[N_VARS][N_VARS])"
+                if lang == "cuda":
+                    return f'#include <math.h>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n\n__device__ {c_sig} {{\n{body}\n}}\n'
+                else:
+                    return f'#include <cmath>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n\n{c_sig} {{\n{body}\n}}\n'
 
     def _gen_header(self, func_name, var_names, param_syms, n_vars, lang):
         """Generate C/C++/CUDA header content with enums, structs, and declarations."""
@@ -691,26 +705,41 @@ end
         lines.append(f"enum ParamIndex {{ {param_entries}, N_PARAMS = {len(param_names)} }};")
         lines.append("")
 
-        struct_kw = "typedef struct" if is_c else "struct SolveVars"
-        lines.append(f"{struct_kw} {{")
-        for v in var_names:
-            lines.append(f"    double {v};")
-        if not is_c:
+        if is_c:
+            lines.append("typedef union {")
+            lines.append("    struct {")
+            for v in var_names:
+                lines.append(f"        double {v};")
+            lines.append("    };")
+            lines.append(f"    double data[{n_vars}];")
+            lines.append("} SolveVars;")
+            lines.append("")
+            lines.append("typedef union {")
+            lines.append("    struct {")
+            for p in param_names:
+                lines.append(f"        double {p};")
+            lines.append("    };")
+            lines.append(f"    double data[{len(param_names)}];")
+            lines.append("} Params;")
+        else:
+            lines.append(f"struct SolveVars {{")
+            for v in var_names:
+                lines.append(f"    double {v};")
             lines.append(f"    {device}const double* data() const {{ return &{var_names[0]}; }}")
             lines.append(f"    {device}double* data() {{ return &{var_names[0]}; }}")
-        lines.append("} SolveVars;" if is_c else "};")
-        lines.append("")
-
-        struct_kw = "typedef struct" if is_c else "struct Params"
-        lines.append(f"{struct_kw} {{")
-        for p in param_names:
-            lines.append(f"    double {p};")
-        if not is_c:
+            lines.append("};")
+            lines.append("")
+            lines.append(f"struct Params {{")
+            for p in param_names:
+                lines.append(f"    double {p};")
             lines.append(f"    {device}const double* data() const {{ return &{param_names[0]}; }}")
-        lines.append("} Params;" if is_c else "};")
+            lines.append("};")
         lines.append("")
 
-        ptr_sig = f"void {func_name}(const double* X, const double* params, double* rhs, double jac[N_VARS][N_VARS])"
+        if is_c:
+            ptr_sig = f"void {func_name}(const SolveVars *vars, const Params *params, SolveVars *rhs, double jac[N_VARS][N_VARS])"
+        else:
+            ptr_sig = f"void {func_name}(const double* X, const double* params, double* rhs, double jac[N_VARS][N_VARS])"
         lines.append(f"__device__ {ptr_sig};" if is_cuda else f"{ptr_sig};")
         lines.append("")
 
@@ -722,3 +751,109 @@ end
             lines.append("")
 
         return "\n".join(lines)
+
+    def _gen_eos(self, var_names, printer):
+        """Generate C code for jaco EOS functions.
+
+        Produces:
+          - jaco_eos_pressure(sv, pr)  — P = sum(n_s * k_B * T) in CGS
+          - jaco_T_to_u(T, pr, *cv)   — specific internal energy u(T) in CGS, with cv output
+          - jaco_u_to_T(u, pr)         — Newton-Raphson inversion of u(T)
+
+        Rewrites species number densities n_s as n_Htot * x_s so the expression
+        uses quantities that exist in the SolveVars/Params structs.
+        Returns the full file content as a string.
+        """
+        from .eos.eos import k_B_cgs, EOS
+        from .symbols import T as T_sym
+
+        species = self.chemical_species
+        eos = EOS(species) if species else None
+
+        var_name_set = set(var_names)
+
+        def _unpack_syms(syms, src_sv="sv", src_pr="pr", skip=frozenset()):
+            """Generate local variable declarations unpacking symbols from structs.
+            If src_sv is None, all symbols are read from src_pr."""
+            decls = []
+            for s in sorted(syms, key=str):
+                name = sanitize_name(str(s))
+                if name in skip:
+                    continue
+                if src_sv is not None and name in var_name_set:
+                    decls.append(f'    const double {name} = {src_sv}->{name};')
+                else:
+                    decls.append(f'    const double {name} = {src_pr}->{name};')
+            return decls
+
+        def _rewrite_for_abundances(expr):
+            """Substitute n_(s) -> n_Htot * x_(s) in an expression."""
+            subs = {n_(s): n_Htot * x_(s) for s in species} if species else {}
+            return expr.subs(subs)
+
+        lines = []
+        lines.append('/* Generated by jaco codegen — EOS functions from species contributions. */')
+        lines.append('#include "microphysics_func_jac.h"')
+        lines.append('#include <math.h>')
+        lines.append('#include <stdio.h>')
+        lines.append('')
+
+        # --- jaco_eos_pressure ---
+        if not species:
+            P_expr = n_Htot * x_("H") * k_B_cgs * T_sym
+        else:
+            P_expr = _rewrite_for_abundances(eos.pressure)
+        P_code = printer.doprint(sanitize_symbols(P_expr))
+        P_syms = P_expr.free_symbols
+
+        lines.append('double jaco_eos_pressure(const SolveVars *sv, const Params *pr) {')
+        lines.extend(_unpack_syms(P_syms, skip={"T"}))
+        lines.append('    const double T = sv->T;')
+        lines.append(f'    return {P_code};')
+        lines.append('}')
+        lines.append('')
+
+        # --- jaco_T_to_u: u(T) and cv(T) ---
+        if not species:
+            # Monatomic ideal H: u = 3/2 k_B T / m_H, cv = 3/2 k_B / m_H
+            m_H = species_mass("H")
+            u_expr = sp.Rational(3, 2) * k_B_cgs * T_sym / m_H
+            cv_expr = sp.Rational(3, 2) * k_B_cgs / m_H
+        else:
+            u_expr = _rewrite_for_abundances(eos.internal_energy)
+            cv_expr = _rewrite_for_abundances(eos.heat_capacity)
+
+        # Apply CSE for potentially complex expressions (e.g. H2 partition function)
+        cse_pairs, reduced = sp.cse(sanitize_symbols([u_expr, cv_expr]))
+        u_reduced = reduced[0]
+        cv_reduced = reduced[1]
+
+        u_syms = u_expr.free_symbols | cv_expr.free_symbols
+        lines.append('double jaco_T_to_u(double T, const Params *pr, double *cv_out) {')
+        lines.extend(_unpack_syms(u_syms, src_sv=None, skip={"T"}))
+        for sym, expr in cse_pairs:
+            lines.append(f'    const double {printer.doprint(sym)} = {printer.doprint(expr)};')
+        lines.append(f'    if (cv_out) {{ *cv_out = {printer.doprint(cv_reduced)}; }}')
+        lines.append(f'    return {printer.doprint(u_reduced)};')
+        lines.append('}')
+        lines.append('')
+
+        # --- jaco_u_to_T: Newton-Raphson inversion ---
+        lines.append('double jaco_u_to_T(double u, const Params *pr) {')
+        lines.append('    double T = u * %.16e;' % (species_mass("H") / (1.5 * k_B_cgs)))
+        lines.append('    double cv, du, T_lo = 1e-3, T_hi = 1e12;')
+        lines.append('    for (int iter = 0; iter < 100; iter++) {')
+        lines.append('        double u_of_T = jaco_T_to_u(T, pr, &cv);')
+        lines.append('        du = u_of_T - u;')
+        lines.append('        if (fabs(du) < 1e-10 * fabs(u)) return T;')
+        lines.append('        if (du > 0) T_hi = fmin(T_hi, T); else T_lo = fmax(T_lo, T);')
+        lines.append('        double dT = -du / cv;')
+        lines.append('        double T_new = T + dT;')
+        lines.append('        if (T_new <= T_lo || T_new >= T_hi) T_new = sqrt(T_lo * T_hi);')
+        lines.append('        T = T_new;')
+        lines.append('    }')
+        lines.append('    printf("jaco_u_to_T failed to converge: u=%g T=%g du=%g\\n", u, T, du);')
+        lines.append('    return T;')
+        lines.append('}')
+        lines.append('')
+        return '\n'.join(lines)

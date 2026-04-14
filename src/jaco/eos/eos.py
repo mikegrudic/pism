@@ -24,7 +24,7 @@ def species_energy(species):
 
 
 def species_heat_capacity(species):
-    """Returns the average thermal energy per particle for a species"""
+    """Returns the heat capacity per particle for a species"""
     if species == "H_2":  # currently the only defined special heat capacity, likely the only one that matters
         fac = sp.diff(T * H2_energy_over_kbT(T), T)
     else:
@@ -39,23 +39,24 @@ class EOS:
     @property
     def density(self):
         """Total mass density"""
-        return sp.factor(sum([species_mass(s) * n_(s) for s in self.species]))
+        return sum([species_mass(s) * n_(s) for s in self.species])
 
     @property
     def energy_density(self):
         """Thermal energy density"""
-        return sp.factor(sum([n_(s) * species_energy(s) for s in self.species]))
+        return sum([n_(s) * species_energy(s) for s in self.species])
 
     @property
     def internal_energy(self):
         """Internal energy per unit mass"""
-        return sp.factor(self.energy_density / self.density)
+        return self.energy_density / self.density
 
     @property
     def pressure(self):
         """Pressure via ideal gas law"""
-        return sp.factor(sum([n_(s) for s in self.species]) * k_B * T)
+        return sum([n_(s) for s in self.species]) * k_B_cgs * T
 
-    # @property
-    # def heat_capacity(self):
-    #     return sum([n_(s) * species_heat_capacity(s) for s in self.species]) / self.density
+    @property
+    def heat_capacity(self):
+        """Specific heat capacity at constant volume (per unit mass)"""
+        return sum([n_(s) * species_heat_capacity(s) for s in self.species]) / self.density
