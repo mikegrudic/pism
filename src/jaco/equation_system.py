@@ -20,12 +20,41 @@ from sympy.codegen.ast import Assignment, Comment
 
 
 class EquationSystem(dict):
-    """Dict of symbolic expressions with certain superpowers for manipulating sets of conservation equations."""
+    """Symbolic equation system for coupled chemical/thermal networks.
+
+    A dict mapping species/quantity names to :class:`Equation` objects,
+    with methods for reducing the system (conservation laws, charge
+    neutrality, fixed species), solving for equilibrium, and generating
+    numerical code (C/C++/CUDA/Python/Julia).
+
+    Attributes
+    ----------
+    fixed_species : dict
+        Maps species name to a sympy expression or constant. These species
+        are treated as externally-provided parameters: their equations are
+        removed during reduction and their x_ symbols are substituted with
+        the given values throughout the remaining equations.
+    equilibrium_overrides : dict
+        Maps species name to a sympy expression for explicit equilibrium
+        substitution (used when automatic steady-state linearization fails).
+    derived_params : dict
+        Maps parameter symbol names to sympy expressions in terms of solve
+        variables and/or true external parameters. These are substituted
+        into the equations BEFORE time discretization and code generation,
+        so their derivatives w.r.t. solve variables (e.g. T) appear correctly
+        in the Jacobian. Example: ``C_2 = 1 + (0.5 * grad_v * Delta_x / cs(T))^2``.
+    substitutions : list of (expr, replacement) tuples
+        Accumulated symbolic substitutions from conservation reductions,
+        charge neutrality, atom conservation, and fixed species.
+    """
 
     def copy(self):
         new = EquationSystem()
         for k in self:
             new[k] = self[k]
+        new.equilibrium_overrides = dict(getattr(self, 'equilibrium_overrides', {}))
+        new.fixed_species = dict(getattr(self, 'fixed_species', {}))
+        new.derived_params = dict(getattr(self, 'derived_params', {}))
         return new
 
     def __getitem__(self, __key: str):
@@ -42,6 +71,12 @@ class EquationSystem(dict):
         new = EquationSystem()
         for k in keys:
             new[k] = self[k] + other[k]
+        new.equilibrium_overrides = {**getattr(self, 'equilibrium_overrides', {}),
+                                     **getattr(other, 'equilibrium_overrides', {})}
+        new.fixed_species = {**getattr(self, 'fixed_species', {}),
+                             **getattr(other, 'fixed_species', {})}
+        new.derived_params = {**getattr(self, 'derived_params', {}),
+                              **getattr(other, 'derived_params', {})}
         return new
 
     @property
@@ -68,12 +103,126 @@ class EquationSystem(dict):
         for k, e in self.items():
             self[k] = e.subs(expr, replacement)
 
+    def fix_species(self, species_values):
+        """Fix species to given values and remove their equations from the system.
+
+        Substitutes x_species symbols with the given values (which may be symbolic
+        expressions of other variables) and removes their equations. Before inlining,
+        cross-substitutes fixed species values into each other so that e.g. the H-
+        expression doesn't contain x_C+ as a free symbol.
+
+        Parameters
+        ----------
+        species_values : dict
+            Maps species name (str) to a sympy expression or float value.
+            E.g. {"C+": 2e-4, "H-": 1e-15, "H_2+": 0}
+        """
+        # First pass: cross-substitute fixed species into each other's expressions
+        # so no fixed species symbol remains as a free symbol in another's value.
+        sym_map = {x_(species): value for species, value in species_values.items()}
+        changed = True
+        while changed:
+            changed = False
+            for xs, value in sym_map.items():
+                if not hasattr(value, 'free_symbols'):
+                    continue
+                for xs2, val2 in sym_map.items():
+                    if xs2 != xs and xs2 in value.free_symbols:
+                        sym_map[xs] = value.subs(xs2, val2)
+                        changed = True
+                        break
+                if changed:
+                    break
+
+        if not hasattr(self, 'substitutions'):
+            self.substitutions = []
+
+        for xs, value in sym_map.items():
+            self.subs(xs, value)
+            self.substitutions = [(expr.subs(xs, value) if hasattr(expr, 'subs') else expr,
+                                   sub.subs(xs, value) if hasattr(sub, 'subs') else sub)
+                                  for expr, sub in self.substitutions]
+            self.substitutions.append((xs, value))
+
+        for species in species_values:
+            self.pop(species, None)
+
+    def prune_decoupled(self):
+        """Remove equations whose LHS variable doesn't appear in any other equation.
+
+        This cleans up equations like 'dust heat' or 'photon_assoc,H' that are
+        decoupled from the main system after fix_species() has been applied.
+        """
+        to_remove = []
+        for key in list(self.keys()):
+            if key in ("heat", "u"):
+                continue  # always keep energy equations
+            # Check if x_{key} appears in any OTHER equation's RHS
+            xs = x_(key)
+            ns = n_(key)
+            found = False
+            for other_key, eq in self.items():
+                if other_key == key:
+                    continue
+                if xs in eq.rhs.free_symbols or ns in eq.rhs.free_symbols:
+                    found = True
+                    break
+            if not found:
+                to_remove.append(key)
+        for key in to_remove:
+            del self[key]
+
     def reduced(self, knowns, time_dependent=[]):
+        """Return a reduced copy of the system ready for solving.
+
+        Applies the full reduction pipeline:
+
+        1. Substitute derived parameters (from ``self.derived_params``) so their
+           T-derivatives appear in the Jacobian
+        2. Set time dependence (BDF for evolved species, steady-state for others)
+        3. Conservation reductions (n→x conversion, charge neutrality, atom conservation)
+        4. Substitute and remove fixed species (from ``self.fixed_species``)
+        5. Remove the heat equation if T is a known parameter
+        6. Prune decoupled equations (orphaned after fixed species removal)
+
+        Parameters
+        ----------
+        knowns : set or dict
+            Names of quantities that are externally provided (not solved for).
+        time_dependent : list of str
+            Species that get backward-Euler time discretization.
+
+        Returns
+        -------
+        EquationSystem
+            Reduced system with only the equations needed for the solve.
+        """
         subsystem = self.copy()
+        # Substitute derived parameters (expressions of solve variables) before
+        # time dependence so the Jacobian includes their T-derivatives
+        derived = getattr(subsystem, 'derived_params', {})
+        for sym_name, expr in derived.items():
+            subsystem.subs(sp.Symbol(sym_name), expr)
         subsystem.set_time_dependence(time_dependent)
         subsystem.do_conservation_reductions(time_dependent)
+        fixed = getattr(subsystem, 'fixed_species', {})
+        if fixed:
+            # Apply derived_params and conservation substitutions (n→x, charge
+            # neutrality, atom conservation) to fixed_species expressions so that
+            # symbols like C_2, n_H, n_H+, n_e- are replaced with their
+            # expressions in terms of solve variables before inlining.
+            for species in fixed:
+                expr = fixed[species]
+                if hasattr(expr, 'free_symbols'):
+                    for sym_name, dp_expr in derived.items():
+                        expr = expr.subs(sp.Symbol(sym_name), dp_expr)
+                    for sym, sub in subsystem.substitutions:
+                        expr = expr.subs(sym, sub)
+                    fixed[species] = expr
+            subsystem.fix_species(fixed)
         if "T" in (str(k) for k in knowns) and "T" not in time_dependent:
             del subsystem["heat"]
+        subsystem.prune_decoupled()
         return subsystem
 
     def set_time_dependence(self, time_dependent_vars):
@@ -87,7 +236,7 @@ class EquationSystem(dict):
 
         if "T" in time_dependent_vars:  # special behaviour
             self["heat"] = Equation(
-                self.eos.density * (self.eos.internal_energy - sp.Symbol("u_0")) / dt, self["heat"].rhs
+                self.eos.density * (self.eos.internal_energy - sp.Symbol("u_initial")) / dt, self["heat"].rhs
             )
             if "u" not in self:
                 self["u"] = Equation(0, sp.Symbol("u") - self.eos.internal_energy)
@@ -97,47 +246,112 @@ class EquationSystem(dict):
         self.substitutions = []
 
         # since we have n_Htot let's convert all other n's to x's
+        # convert n_ to x_ (abundances per H): n_s -> n_Htot * x_s
         for s in self.symbols:
             if str(s)[:2] == "n_" and "Htot" not in str(s):
                 self.substitutions.append((s, n_Htot * sp.Symbol("x_" + str(s)[2:])))
-            # TODO: when we do this we must also fix the LHS of the evolution equation.
-            # n_i = n_H x_i -> d(n_i)/dt = x_i d(n_H)/dt + n_H d(x_i)/dt (Lagrangian density evolution term)
-            # d(x_i)/dt = d/dt (n_i/n_H) = -x_i dlog(n_H)/dt + d(n_i)/dt / n_H
+        for expr, sub in self.substitutions:
+            self.subs(expr, sub)
 
-        # charge neutrality
-        if n_("e-") in self.symbols and "e-" not in time_dependent_vars:
+        # Optional steady-state elimination: for species not being evolved in time,
+        # solve 0 = RHS for x_s if linear. Off by default — when enabled, eliminated
+        # species are substituted into all expressions (including EOS), which can make
+        # them unwieldy. When off, these species remain as parameters that the caller
+        # must set.
+        if getattr(self, 'eliminate_steady_state', False):
+            overrides = getattr(self, 'equilibrium_overrides', {})
+            ss_subs = []
+            for species in list(self.keys()):
+                if species in time_dependent_vars or species == "heat" or species == "u":
+                    continue
+                if species in atoms:
+                    continue
+                eq = self[species]
+                if eq.lhs != 0:
+                    continue
+                xs = x_(species)
+                if species in overrides:
+                    ss_subs.append((xs, overrides[species]))
+                    self.pop(species, None)
+                    continue
+                if xs not in eq.rhs.free_symbols:
+                    continue
+                rhs = eq.rhs
+                terms = sp.Add.make_args(sp.expand(rhs))
+                P_terms = [t for t in terms if not t.has(xs)]
+                D_terms = [t for t in terms if t.has(xs)]
+                if not D_terms:
+                    continue
+                P = sum(P_terms) if P_terms else sp.S.Zero
+                D = sum(t / xs for t in D_terms)
+                if D.has(xs):
+                    continue
+                ss_subs.append((xs, -P / D))
+                self.pop(species, None)
+
+            for species, sub in overrides.items():
+                xs = x_(species)
+                if any(a == xs for a, _ in ss_subs):
+                    continue
+                if xs in self.symbols:
+                    ss_subs.append((xs, sub))
+                    self.pop(species, None)
+
+            for expr, sub in ss_subs:
+                self.substitutions.append((expr, sub))
+                self.subs(expr, sub)
+
+        # charge neutrality — exclude fixed species with negative charge whose
+        # equilibrium expressions depend on x_e (e.g. H-), to avoid circular
+        # substitutions. Positive fixed species (e.g. C+) are included since
+        # they contribute significantly to the electron budget.
+        fixed = getattr(self, 'fixed_species', {})
+        conservation_subs = []
+        if (n_("e-") in self.symbols or x_("e-") in self.symbols) and "e-" not in time_dependent_vars:
             x_ion_sum = 0
             for s in self.chemical_species:
                 if s == "e-":
                     continue
+                if s in fixed:
+                    fval = fixed[s]
+                    if hasattr(fval, 'free_symbols') and (
+                        x_("e-") in fval.free_symbols or n_("e-") in fval.free_symbols):
+                        continue  # skip: expression depends on electron abundance (circular)
                 x_ion_sum += species_charge(s) * x_(s)
-            self.substitutions.append((x_("e-"), x_ion_sum))
+            conservation_subs.append((x_("e-"), x_ion_sum))
             del self["e-"]
 
-        # atom species conservation
+        # atom species conservation — exclude fixed species only if their
+        # expression would create a circular dependency (i.e., the fixed species'
+        # value expression contains x_atom for the atom being conserved)
         counts = {j: species_counts(j) for j in self.chemical_species}
         for i in self.chemical_species:
             if i not in atoms:  # i is an atom
                 continue
-            # get total abundance of species
             x_total = 0
             for j in self.chemical_species:
                 if j == i:
                     continue
+                if j in fixed:
+                    # Only skip if the fixed expression references this atom (circularity)
+                    fval = fixed[j]
+                    if hasattr(fval, 'free_symbols') and (
+                        x_(i) in fval.free_symbols or n_(i) in fval.free_symbols):
+                        continue
                 if i in counts[j]:
                     x_total += counts[j][i] * x_(j)
 
-            if x_total == 0:  # no other species containing i found
+            if x_total == 0:
                 continue
 
             xtot = total_atom_abundance(i)
-            self.substitutions.append((x_(i), xtot - x_total))
-            # Some species (e.g. metals appearing only in heat terms) are
-            # detected by chemical_species but have no evolution equation.
+            conservation_subs.append((x_(i), xtot - x_total))
             self.pop(i, None)
 
-        for expr, sub in self.substitutions:
+        for expr, sub in conservation_subs:
+            self.substitutions.append((expr, sub))
             self.subs(expr, sub)
+
 
     @property
     def rhs(self):
@@ -240,13 +454,19 @@ class EquationSystem(dict):
                     symbols = subsystem.symbols
                     # case 2: we have given an expression in terms of the other available quantities: we need to subs it
 
-        # ok now we should have number of symbols unknowns + knowns
+        # Allow extra knowns — they may be needed for evaluating substitution
+        # expressions in post-processing even if they aren't free symbols of
+        # the reduced equation system itself.
+        sym_strs = {str(s) for s in symbols}
+        n_knowns_used = sum(1 for k in (knowns | assumed_values)
+                           if k in sym_strs or f"x_{k}" in sym_strs)
         printv(
             f"Free symbols: {symbols}\nKnown values: {list(knowns)}\nAssumed values: {list(assumed_values)}\nEquations solved: {list(subsystem.rhs)}"
         )
-        if len(symbols) != len(knowns | assumed_values) + len(subsystem):
+        if len(symbols) != n_knowns_used + len(subsystem):
             raise ValueError(
-                f"Number of free symbols is {len(symbols)} != number of knowns {len(knowns)} + number of assumptions {len(assumed_values)} + number of equations {len(subsystem)}\n"
+                f"Number of free symbols is {len(symbols)} != number of matched knowns {n_knowns_used} + number of equations {len(subsystem)}\n"
+                f"(total knowns passed: {len(knowns | assumed_values)}, extra knowns ignored)\n"
             )
         else:
             printv(
@@ -310,20 +530,49 @@ class EquationSystem(dict):
         )
         printv(f"num_iter average={num_iter.mean()} min={num_iter.min()} max={num_iter.max()}")
 
-        soldict = self.package_solution(sol, guessvals, guesses, paramvals, subsystem, symbolic_keys)
+        soldict = self.package_solution(sol, guessvals, guesses, paramvals, subsystem, symbolic_keys,
+                                        all_knowns=knowns | assumed_values)
 
         return soldict
 
-    def package_solution(self, sol, guessvals, guesses, paramvals, subsystem, symbolic_keys):
-        """Takes the output of newton_rootsolve and packages it into a dict containing the system solution for all variables,
-        including substitutions for eliminated variables.
+    def package_solution(self, sol, guessvals, guesses, paramvals, subsystem, symbolic_keys, all_knowns=None):
+        """Package the raw solver output into a named dict of all species.
+
+        Evaluates the reverse substitution chain (atom conservation, charge
+        neutrality, fixed species) to recover derived quantities like x_H, x_He, x_O
+        that were eliminated from the solve system.
+
+        Parameters
+        ----------
+        sol : array
+            Raw solver output, shape (N, n_vars).
+        guessvals : dict
+            Maps sympy Symbol to initial guess array (defines solve variable order).
+        guesses : dict
+            Original guess dict (string keys).
+        paramvals : dict
+            Maps sympy Symbol to known parameter arrays.
+        subsystem : EquationSystem
+            The reduced system (carries the substitution chain).
+        symbolic_keys : bool
+            If True, return dict keys as sympy Symbols; otherwise as strings.
+        all_knowns : dict, optional
+            All known parameter values (including extras not in paramvals),
+            needed for evaluating substitution expressions that reference
+            quantities eliminated by atom conservation.
         """
         # now repack the solution
         soldict = {}
         for i, g in enumerate(guessvals):
             soldict[g] = sol[:, i]
         # do a reverse-pass on the substitutions we made to get all quantities
-        values_to_subs = soldict | paramvals
+        # Include all knowns (not just those matched to symbols) so substitution
+        # expressions can reference quantities eliminated by atom conservation
+        all_known_syms = {}
+        if all_knowns:
+            for k, v in all_knowns.items():
+                all_known_syms[sp.Symbol(k)] = np.array(v)
+        values_to_subs = soldict | paramvals | all_known_syms
         for expr, sub in reversed(subsystem.substitutions):
             if expr in soldict:
                 continue
@@ -359,6 +608,7 @@ class EquationSystem(dict):
 
         knowns = self.symbols.difference(solve_vars)
         subsystem = self.reduced(knowns, time_dependent)
+        self._reduction_substitutions = getattr(subsystem, 'substitutions', [])
 
         rhs = {}
         for s in subsystem.symbols:
@@ -535,6 +785,15 @@ class EquationSystem(dict):
         if lang == "c":
             result["eos_code"] = self._gen_eos(var_names, printer)
 
+        # Collect 2D/3D tables from the registry that are referenced in the generated code
+        from .interpolation import _TABLE_REGISTRY
+        tables_used = {}
+        for name, table in _TABLE_REGISTRY.items():
+            if table["ndim"] >= 2:
+                tables_used[name] = table
+        if tables_used:
+            result["tables"] = tables_used
+
         return result
 
     def _gen_symbolic_code(self, func_mat, jac_mat, var_names, param_syms, printer, cse, lang, func_name):
@@ -683,7 +942,11 @@ end
         else:
             if lang == "c":
                 c_sig = f"void {func_name}(const SolveVars *vars, const Params *params, SolveVars *rhs, double jac[N_VARS][N_VARS])"
-                return f'#include <math.h>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n\n{c_sig} {{\n{body}\n}}\n'
+                includes = f'#include <math.h>\n#include "{func_name}.h"\n#include "jaco_interp.h"\n'
+                from .interpolation import _TABLE_REGISTRY
+                if any(t["ndim"] >= 2 for t in _TABLE_REGISTRY.values()):
+                    includes += '#include "jaco_tables.h"\n'
+                return f'{includes}\n{c_sig} {{\n{body}\n}}\n'
             else:
                 c_sig = f"void {func_name}(const double* X, const double* params, double* rhs, double jac[N_VARS][N_VARS])"
                 if lang == "cuda":
@@ -787,9 +1050,14 @@ end
             return decls
 
         def _rewrite_for_abundances(expr):
-            """Substitute n_(s) -> n_Htot * x_(s) in an expression."""
+            """Substitute n_(s) -> n_Htot * x_(s), then apply reduction substitutions
+            (steady-state elimination, charge neutrality, atom conservation) so the
+            expression only references symbols that exist in SolveVars/Params."""
             subs = {n_(s): n_Htot * x_(s) for s in species} if species else {}
-            return expr.subs(subs)
+            expr = expr.subs(subs)
+            for sym, sub in getattr(self, '_reduction_substitutions', []):
+                expr = expr.subs(sym, sub)
+            return expr
 
         lines = []
         lines.append('/* Generated by jaco codegen — EOS functions from species contributions. */')
@@ -829,8 +1097,8 @@ end
         cv_reduced = reduced[1]
 
         u_syms = u_expr.free_symbols | cv_expr.free_symbols
-        lines.append('double jaco_T_to_u(double T, const Params *pr, double *cv_out) {')
-        lines.extend(_unpack_syms(u_syms, src_sv=None, skip={"T"}))
+        lines.append('double jaco_T_to_u(double T, const SolveVars *sv, const Params *pr, double *cv_out) {')
+        lines.extend(_unpack_syms(u_syms, skip={"T"}))
         for sym, expr in cse_pairs:
             lines.append(f'    const double {printer.doprint(sym)} = {printer.doprint(expr)};')
         lines.append(f'    if (cv_out) {{ *cv_out = {printer.doprint(cv_reduced)}; }}')
@@ -839,11 +1107,11 @@ end
         lines.append('')
 
         # --- jaco_u_to_T: Newton-Raphson inversion ---
-        lines.append('double jaco_u_to_T(double u, const Params *pr) {')
+        lines.append('double jaco_u_to_T(double u, const SolveVars *sv, const Params *pr) {')
         lines.append('    double T = u * %.16e;' % (species_mass("H") / (1.5 * k_B_cgs)))
         lines.append('    double cv, du, T_lo = 1e-3, T_hi = 1e12;')
         lines.append('    for (int iter = 0; iter < 100; iter++) {')
-        lines.append('        double u_of_T = jaco_T_to_u(T, pr, &cv);')
+        lines.append('        double u_of_T = jaco_T_to_u(T, sv, pr, &cv);')
         lines.append('        du = u_of_T - u;')
         lines.append('        if (fabs(du) < 1e-10 * fabs(u)) return T;')
         lines.append('        if (du > 0) T_hi = fmin(T_hi, T); else T_lo = fmax(T_lo, T);')

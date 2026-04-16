@@ -13,8 +13,7 @@ beta_T = 0.164
 
 # note we are letting 'lambda' be the usual thing defined cm^3 erg s^-1, not their erg s^-1
 lambda_CO_lo = lam_CO_lo * T**1.5
-# TODO: make sure grad_v is in s^-1!!!
-gradv_units = 3.241e-14  # km/s/pc in s^-1
+# LVG limit: grad_v is in s^-1 (CGS), 3.241e-14 = 1 km/s/pc in s^-1
 # using n_H here because they are really using n_H_2 as a proxy for mass density, in practice
 lambda_CO_hi = lam_CO_hi * (x_("CO") * 3.241e-14 / grad_v) ** -1 * T**4 / (0.5 * n_Htot) ** 2
 beta = 1.23 * (0.5 * n_Htot) ** beta_nH2 * T**beta_T

@@ -151,7 +151,7 @@ class Process:
         jac_mode : str
             'symbolic' or 'autodiff'
         """
-        from .codegen.gizmo.gizmo import generate_funcjac_code
+        from .codegen.gizmo import generate_funcjac_code
         generate_funcjac_code(
             self, solve_vars=solve_vars or None,
             time_dependent=time_dependent or None,

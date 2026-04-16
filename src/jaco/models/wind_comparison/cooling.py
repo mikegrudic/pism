@@ -48,5 +48,18 @@ cooling = ThermalProcess(-lambda_cooling * n_("H") ** 2, name="Cooling")
 heating = ThermalProcess(2e-26 * n_("H") * logistic(-(T - 15000) / 1000), name="Heating")
 
 
+pdv_work = ThermalProcess(sp.Symbol("pdv_work"), name="PdV work")
+
+
 def make_model():
-    return cooling + heating
+    """Build the wind_comparison model: simple atomic-H cooling + heating + PdV work.
+
+    A minimal model with a tabulated cooling curve, a low-temperature heating
+    floor, and an external PdV work parameter. Used for wind bubble tests.
+
+    Returns
+    -------
+    Process
+        Composite process with cooling, heating, and PdV work.
+    """
+    return cooling + heating + pdv_work

@@ -1,1 +1,1 @@
-# from .starforge import starforge
+from .starforge import make_model

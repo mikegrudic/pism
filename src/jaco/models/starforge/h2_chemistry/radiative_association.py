@@ -24,7 +24,7 @@ def radiative_association(species):
             bib = ["1979MNRAS.187P..59W"]
             k_low = -17.845 + 0.762 * log_T + 0.1523 * log_T * log_T - 0.03274 * log_T * log_T * log_T
             k_high = -16.420 + 0.1998 * log_T**2 - 5.447e-3 * log_T**4 + 4.0415e-5 * log_T**6
-            k = sp.Piecewise((k_low, T < 6000), (k_high, T >= 6000))
+            k = 10**sp.Piecewise((k_low, T < 6000), (k_high, T >= 6000))
         case _:
             raise NotImplementedError(f"Radiative association rate not implemented for species {species}.")
 

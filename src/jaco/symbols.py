@@ -53,13 +53,32 @@ def x_(species: str):
 
 
 def BDF(species):
-    # if species in ("T", "u"):  # this is the heat equation
-    #     return rho * (internal_energy - sp.Symbol("u_0")) / dt
-    # else:
-    return (n_(species) - sp.Symbol(str(n_(species)) + "_0")) / dt
+    """Backward-difference formula for time discretization: (n_s - n_s_initial) / Δt.
+
+    The initial-value symbol uses the ``_initial`` suffix (not ``_0``) to avoid
+    confusion with species names during the n→x conversion in
+    :meth:`EquationSystem.do_conservation_reductions`. A ``_0`` suffix would be
+    misidentified as part of a species name (e.g. ``n_H_2_0`` → ``x_H_2_0``
+    treated as a species containing 2 H atoms).
+    """
+    return (n_(species) - sp.Symbol(str(n_(species)) + "_initial")) / dt
 
 
-_SANITIZE_REPLACEMENTS = {"+": "plus", "-": "minus", ",": "_"}
+#: Character replacements for converting sympy symbol names to valid C identifiers.
+#: Greek letters are spelled out, ∇ becomes ``grad_``, Δ becomes ``Delta_``
+#: (with trailing underscore to separate from the following character).
+_SANITIZE_REPLACEMENTS = {
+    "+": "plus", "-": "minus", ",": "_",
+    "∇": "grad_",
+    "α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "epsilon",
+    "ζ": "zeta", "η": "eta", "θ": "theta", "ι": "iota", "κ": "kappa",
+    "λ": "lambda_", "μ": "mu", "ν": "nu", "ξ": "xi", "π": "pi",
+    "ρ": "rho", "σ": "sigma", "τ": "tau", "υ": "upsilon", "φ": "phi",
+    "χ": "chi", "ψ": "psi", "ω": "omega",
+    "Γ": "Gamma", "Δ": "Delta_", "Θ": "Theta", "Λ": "Lambda", "Ξ": "Xi",
+    "Π": "Pi", "Σ": "Sigma", "Φ": "Phi", "Ψ": "Psi", "Ω": "Omega",
+    "⍴": "rho",
+}
 
 
 def sanitize_name(name):

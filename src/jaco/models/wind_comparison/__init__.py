@@ -1,1 +1,1 @@
-from .cooling import cooling, heating
+from .cooling import cooling, heating, make_model

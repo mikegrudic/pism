@@ -170,110 +170,34 @@ JACO_TABLE_FUNC double jaco_table3d_interp_dz(double x0, double x1, double x2, c
     double g; jaco_table3d_eval(x0, x1, x2, t, NULL, NULL, &g); return g;
 }
 
-// --- HDF5 Loaders ---
+// --- HDF5 data loader (metadata set separately by codegen) ---
 
-JACO_HOST_FUNC static JacoTable2D jaco_table2d_load(const char* filename) {
-    JacoTable2D t;
+JACO_HOST_FUNC static void jaco_table2d_load_data(JacoTable2D* t, const char* filename) {
     hid_t file = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
-
-    hid_t dset = H5Dopen(file, "data", H5P_DEFAULT);
+    if (file < 0) { fprintf(stderr, "JACO FATAL: cannot open table file '%s'\n", filename); exit(1); }
+    hid_t dset = H5Dopen(file, "data");
     hid_t space = H5Dget_space(dset);
     hsize_t dims[2];
     H5Sget_simple_extent_dims(space, dims, NULL);
-    t.n0 = (int)dims[0]; t.n1 = (int)dims[1];
-    t.data = (double*)malloc(t.n0 * t.n1 * sizeof(double));
-    H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, t.data);
+    t->n0 = (int)dims[0]; t->n1 = (int)dims[1];
+    t->data = (double*)malloc(t->n0 * t->n1 * sizeof(double));
+    H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, t->data);
     H5Sclose(space); H5Dclose(dset);
-
-    // Read axis endpoints
-    double ax0[2], ax1[2];
-    hid_t a0 = H5Dopen(file, "axis0", H5P_DEFAULT);
-    hid_t a0s = H5Dget_space(a0);
-    hsize_t start = 0, count = 1;
-    H5Sselect_hyperslab(a0s, H5S_SELECT_SET, &start, NULL, &count, NULL);
-    hid_t memspace1 = H5Screate_simple(1, &count, NULL);
-    H5Dread(a0, H5T_NATIVE_DOUBLE, memspace1, a0s, H5P_DEFAULT, &ax0[0]);
-    start = dims[0] - 1;
-    H5Sselect_hyperslab(a0s, H5S_SELECT_SET, &start, NULL, &count, NULL);
-    H5Dread(a0, H5T_NATIVE_DOUBLE, memspace1, a0s, H5P_DEFAULT, &ax0[1]);
-    H5Sclose(a0s); H5Dclose(a0);
-
-    hid_t a1 = H5Dopen(file, "axis1", H5P_DEFAULT);
-    hid_t a1s = H5Dget_space(a1);
-    start = 0;
-    H5Sselect_hyperslab(a1s, H5S_SELECT_SET, &start, NULL, &count, NULL);
-    H5Dread(a1, H5T_NATIVE_DOUBLE, memspace1, a1s, H5P_DEFAULT, &ax1[0]);
-    start = dims[1] - 1;
-    H5Sselect_hyperslab(a1s, H5S_SELECT_SET, &start, NULL, &count, NULL);
-    H5Dread(a1, H5T_NATIVE_DOUBLE, memspace1, a1s, H5P_DEFAULT, &ax1[1]);
-    H5Sclose(a1s); H5Dclose(a1); H5Sclose(memspace1);
-
-    t.min0 = ax0[0]; t.max0 = ax0[1];
-    t.min1 = ax1[0]; t.max1 = ax1[1];
-
-    // Read log flags from attributes
-    t.log0 = 0; t.log1 = 0;
-    if (H5Aexists(file, "axis0_log")) {
-        hid_t attr = H5Aopen(file, "axis0_log", H5P_DEFAULT);
-        int val; H5Aread(attr, H5T_NATIVE_INT, &val); t.log0 = val; H5Aclose(attr);
-    }
-    if (H5Aexists(file, "axis1_log")) {
-        hid_t attr = H5Aopen(file, "axis1_log", H5P_DEFAULT);
-        int val; H5Aread(attr, H5T_NATIVE_INT, &val); t.log1 = val; H5Aclose(attr);
-    }
-
     H5Fclose(file);
-    return t;
 }
 
-JACO_HOST_FUNC static JacoTable3D jaco_table3d_load(const char* filename) {
-    JacoTable3D t;
+JACO_HOST_FUNC static void jaco_table3d_load_data(JacoTable3D* t, const char* filename) {
     hid_t file = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
-
-    hid_t dset = H5Dopen(file, "data", H5P_DEFAULT);
+    if (file < 0) { fprintf(stderr, "JACO FATAL: cannot open table file '%s'\n", filename); exit(1); }
+    hid_t dset = H5Dopen(file, "data");
     hid_t space = H5Dget_space(dset);
     hsize_t dims[3];
     H5Sget_simple_extent_dims(space, dims, NULL);
-    t.n0 = (int)dims[0]; t.n1 = (int)dims[1]; t.n2 = (int)dims[2];
-    t.data = (double*)malloc(t.n0 * t.n1 * t.n2 * sizeof(double));
-    H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, t.data);
+    t->n0 = (int)dims[0]; t->n1 = (int)dims[1]; t->n2 = (int)dims[2];
+    t->data = (double*)malloc(t->n0 * t->n1 * t->n2 * sizeof(double));
+    H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, t->data);
     H5Sclose(space); H5Dclose(dset);
-
-    double ax[2];
-    hsize_t start, count = 1;
-    hid_t memspace1 = H5Screate_simple(1, &count, NULL);
-
-    for (int i = 0; i < 3; i++) {
-        char name[16]; snprintf(name, sizeof(name), "axis%d", i);
-        hid_t ai = H5Dopen(file, name, H5P_DEFAULT);
-        hid_t ais = H5Dget_space(ai);
-        start = 0;
-        H5Sselect_hyperslab(ais, H5S_SELECT_SET, &start, NULL, &count, NULL);
-        H5Dread(ai, H5T_NATIVE_DOUBLE, memspace1, ais, H5P_DEFAULT, &ax[0]);
-        start = dims[i] - 1;
-        H5Sselect_hyperslab(ais, H5S_SELECT_SET, &start, NULL, &count, NULL);
-        H5Dread(ai, H5T_NATIVE_DOUBLE, memspace1, ais, H5P_DEFAULT, &ax[1]);
-        H5Sclose(ais); H5Dclose(ai);
-        switch(i) {
-            case 0: t.min0 = ax[0]; t.max0 = ax[1]; break;
-            case 1: t.min1 = ax[0]; t.max1 = ax[1]; break;
-            case 2: t.min2 = ax[0]; t.max2 = ax[1]; break;
-        }
-    }
-    H5Sclose(memspace1);
-
-    t.log0 = 0; t.log1 = 0; t.log2 = 0;
-    const char* lognames[] = {"axis0_log", "axis1_log", "axis2_log"};
-    int* logflags[] = {&t.log0, &t.log1, &t.log2};
-    for (int i = 0; i < 3; i++) {
-        if (H5Aexists(file, lognames[i])) {
-            hid_t attr = H5Aopen(file, lognames[i], H5P_DEFAULT);
-            int val; H5Aread(attr, H5T_NATIVE_INT, &val); *logflags[i] = val; H5Aclose(attr);
-        }
-    }
-
     H5Fclose(file);
-    return t;
 }
 
 #ifdef __CUDACC__

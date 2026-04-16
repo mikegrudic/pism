@@ -302,7 +302,18 @@ def _print_interp_const(printer, expr, func_name="jaco_interp1d_const"):
 
 
 class JacoCCodePrinter(_InterpPrinterMixin, C99CodePrinter):
-    """C99 printer that emits helper-function calls for piecewise interpolation."""
+    """C99 printer that emits helper-function calls for piecewise interpolation
+    and clamps exp() arguments to prevent overflow."""
+
+    def _print_exp(self, expr):
+        """Clamp exp() arguments to [-500, 500] to prevent overflow.
+
+        Without this, deeply nested rate coefficient expressions can produce
+        exp(x) with |x| > 709 (double overflow), which under -ffast-math
+        silently becomes NaN and corrupts the Jacobian.
+        """
+        arg = self._print(expr.args[0])
+        return f"exp(fmax(-500.0, fmin(500.0, {arg})))"
 
     def _print_PiecewiseLinearInterp(self, expr):
         return _print_interp_linear(self, expr)
