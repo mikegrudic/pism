@@ -14,11 +14,17 @@ def n_HD_prescription():
 
 
 def lambda_H2_thin(collider):
-    """Returns symbolic expression for the non-LTE collisional excitation cooling rate for H_2 with a colliding species"""
-    q = sp.Min(log_T - 3.0, 2.0)
+    """Returns symbolic expression for the non-LTE collisional excitation cooling rate for H_2 with a colliding species.
+
+    The polynomial fits below are derived for T <~ 10,000 K (log_T <~ 4); they extrapolate
+    badly at higher T (rate collapses, derivative changes sign). H2 is physically
+    dissociated at T > 10,000 K, so we cap log_T at 4 here. Above that, the rate is
+    frozen at its T=10,000 K value, which is a conservative upper bound on H2 cooling."""
+    log_T_capped = sp.Min(log_T, 4.0)
+    q = sp.Min(log_T_capped - 3.0, 2.0)
     match collider:
         case "H":
-            return 10 ** (-103.0 + 97.59 * log_T - 48.05 * log_T**2 + 10.8 * log_T**3 - 0.9032 * log_T**4)
+            return 10 ** (-103.0 + 97.59 * log_T_capped - 48.05 * log_T_capped**2 + 10.8 * log_T_capped**3 - 0.9032 * log_T_capped**4)
         # GA08 Eq 26, Galli & Palla 1998 - for H2-H collisions
         case "He":
             return 10 ** (
@@ -65,7 +71,7 @@ def lambda_H2_thin(collider):
                 - 0.910232 * q * q * q * q
                 + 0.137497 * q * q * q * q * q
             )
-            return sp.Piecewise((lambda_H2_thin_e_lo, log_T < 2.30103), (lambda_H2_thin_e_hi, log_T >= 2.30103))
+            return sp.Piecewise((lambda_H2_thin_e_lo, log_T_capped < 2.30103), (lambda_H2_thin_e_hi, log_T_capped >= 2.30103))
 
 
 def H2_cooling_rate():
